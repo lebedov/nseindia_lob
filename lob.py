@@ -312,11 +312,13 @@ class LimitOrderBook(object):
                     # transaction:
                     if od[order_number]['volume_original'] == volume_original:
                         pass
+                    
                     # If an ask order has a greater volume than that requested
                     # in the bid, decrement its volume accordingly and record a
                     # transaction:
                     elif od[order_number]['volume_original'] > volume_original:
                         pass
+                    
                     # XXX What if the ask volume is below the requested bid volume?
                     else
                         self.logger.info('undefined behavior for best ask '
@@ -380,7 +382,7 @@ class LimitOrderBook(object):
                     od.push(order)
                     
                 # If the modify changes the price of an order, update it
-                # without alterning where it is in the queue:
+                # without altering where it is in the queue:
                 elif order['original_volume'] != old_order['original_volume']:
                     self.logger.info('modified order %i volume from %f to %f: ' % \
                                      (order_number,
