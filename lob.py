@@ -88,6 +88,11 @@ class LimitOrderBook(object):
         # structure:
         self._trades = odict.odict()
 
+        # The best bids and asks are stored in two dictionaries:
+        self._best_prices = {}
+        self._best_prices[BID] = odict.odict()
+        self._best_prices[ASK] = odict.odict()
+        
     def clear_book(self):
         """
         Clear all outstanding limit orders from the book
@@ -141,8 +146,14 @@ class LimitOrderBook(object):
                 else:    
                     self.modify(order)
             else:
-                raise ValueError('unrecognized activity type %i' % order['activity_type'])
+                raise ValueError('unrecognized activity type %i' % \
+                                 order['activity_type'])
 
+            # Save the best bid and ask:
+            date_time = order['trans_date']+' '+order['trans_time']
+            self._best_prices[BID][date_time] = self.best_bid_price()
+            self._best_prices[ASK][date_time] = self.best_ask_price()
+            
     def create_level(self, indicator, price):
         """
         Create a new empty price level queue.
@@ -671,7 +682,32 @@ class LimitOrderBook(object):
               '%.2f' % trade['trade_price'], trade['trade_quantity'], \
               trade['buy_order_number'], trade['sell_order_number']])
         if file_name is not None:
-            f.close()            
+            f.close()
+
+    def print_best_prices(self, indicator, file_name=None):
+        """
+        Print best bids or asks.
+
+        Parameters
+        ----------
+        indicator : str
+            B for bid, S for ask.
+        file_name : str
+            Output file name. If no file is specified, the output is written to
+            stdout.
+        
+        """
+
+        if file_name is None:
+            w = csv.writer(sys.stdout)
+        else:
+            f = open(file_name, 'wb')
+            w = csv.writer(f)
+        for entry in self._best_prices[indicator].iteritems():
+            date_time, price = entry
+            w.writerow([date_time, price])
+        if file_name is not None:
+            f.close()
             
 if __name__ == '__main__':
     format = '%(asctime)s %(name)s %(levelname)s [%(funcName)s] %(message)s'
