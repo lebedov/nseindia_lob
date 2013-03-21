@@ -648,18 +648,30 @@ class LimitOrderBook(object):
         else:
             self.logger.info('no matching price level found')
 
-    def print_trades(self):
+    def print_trades(self, file_name=None):
         """
         Print trades in CSV format.
+
+        Parameters
+        ----------
+        file_name : str
+            Output file name. If no file is specified, the output is written to
+            stdout.
+        
         """
 
-        w = csv.writer(sys.stdout)
+        if file_name is None:
+            w = csv.writer(sys.stdout)
+        else:
+            f = open(file_name, 'wb')
+            w = csv.writer(f)
         for entry in self._trades.iteritems():
             trade_number, trade = entry
             w.writerow([trade_number, trade['trade_date'], trade['trade_time'], \
               '%.2f' % trade['trade_price'], trade['trade_quantity'], \
               trade['buy_order_number'], trade['sell_order_number']])
-            
+        if file_name is not None:
+            f.close()            
             
 if __name__ == '__main__':
     format = '%(asctime)s %(name)s %(levelname)s [%(funcName)s] %(message)s'
