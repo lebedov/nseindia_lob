@@ -450,6 +450,10 @@ class LimitOrderBook(object):
                     self.logger.info('no matching price level found')
                     od = self.create_level(indicator, price)
 
+                self.logger.info('adding order: %s, %s, %s' % \
+                                 (new_order['order_number'],
+                                  new_order['buy_sell_indicator'],
+                                  new_order['limit_price']))
                 od[new_order['order_number']] = new_order
 
             # Try to match marketable orders with orders that are already in the
@@ -642,12 +646,16 @@ class LimitOrderBook(object):
             self.logger.info('no matching price level found')
                     
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s %(name)s %(levelname)s [%(funcName)s] %(message)s')    
+    format = '%(asctime)s %(name)s %(levelname)s [%(funcName)s] %(message)s'
+    logging.basicConfig(level=logging.DEBUG, format=format)
     file_name = 'AXISBANK-orders.csv'
 
     df = pandas.read_csv(file_name,
                          names=col_names,
                          nrows=10000)
+
     lob = LimitOrderBook()
+    fh = logging.FileHandler('lob.log', 'w')
+    fh.setFormatter(logging.Formatter(format))
+    lob.logger.addHandler(fh)
     lob.process(df)
