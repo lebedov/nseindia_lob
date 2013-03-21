@@ -17,11 +17,12 @@ Notes
   http://iopscience.iop.org/0295-5075/75/3/510/fulltext/
 """
 
+import csv
 import datetime
 import logging
 import odict
 import pandas
-
+import sys
 col_names = \
   ['record_indicator',
    'segment',
@@ -85,7 +86,7 @@ class LimitOrderBook(object):
         
         # Trades performed as orders arrive are recorded in this data
         # structure:
-        self._trades = {}
+        self._trades = odict.odict()
 
     def clear_book(self):
         """
@@ -117,15 +118,15 @@ class LimitOrderBook(object):
         day = None
         for row in df.iterrows():
             order = row[1].to_dict()
-            self.logger.info('processing order %i' % order['order_number'])
+            self.logger.info('processing order: %i' % order['order_number'])
 
             # Reset the limit order book when a new day of orders begins:
             trans_date = datetime.datetime.strptime(order['trans_date'], '%m/%d/%Y')
             if day is None:
                 day = trans_date.day
-                self.logger.info('day set to %s' % day)
+                self.logger.info('setting day: %s' % day)
             elif day != trans_date.day:
-                self.logger.info('new day - resetting book')
+                self.logger.info('new day - book reset')
                 self.clear_book()
                 
             if order['activity_type'] == 1:
@@ -206,7 +207,7 @@ class LimitOrderBook(object):
         book = self._book_data[indicator]
         od = book[price]
         od.pop(order_number)
-        self.logger.info('deleted order %s from price level: %s, %f' % \
+        self.logger.info('deleted order: %s, %s, %s' % \
                          (order_number, indicator, price))
         if not od:
             self.delete_level(indicator, price)
@@ -309,7 +310,8 @@ class LimitOrderBook(object):
         
         """
         
-        trade = {'trade_time': trade_time,
+        trade = {'trade_date': trade_date,
+                 'trade_time': trade_time,
                  'trade_price': trade_price,
                  'trade_quantity': trade_quantity,
                  'buy_order_number': buy_order_number,
@@ -450,7 +452,7 @@ class LimitOrderBook(object):
                     self.logger.info('no matching price level found')
                     od = self.create_level(indicator, price)
 
-                self.logger.info('adding order: %s, %s, %s' % \
+                self.logger.info('added order: %s, %s, %s' % \
                                  (new_order['order_number'],
                                   new_order['buy_sell_indicator'],
                                   new_order['limit_price']))
@@ -641,10 +643,24 @@ class LimitOrderBook(object):
                 self.logger.info('order number %i not found' % order_number)
             else:
                 self.delete_order(indicator, price, order_number)          
-                self.logger.info('canceled order %i' % order_number)
+                self.logger.info('canceled order: %s, %s, %s' % \
+                                 (order_number, indicator, price))
         else:
             self.logger.info('no matching price level found')
-                    
+
+    def print_trades(self):
+        """
+        Print trades in CSV format.
+        """
+
+        w = csv.writer(sys.stdout)
+        for entry in self._trades.iteritems():
+            trade_number, trade = entry
+            w.writerow([trade_number, trade['trade_date'], trade['trade_time'], \
+              '%.2f' % trade['trade_price'], trade['trade_quantity'], \
+              trade['buy_order_number'], trade['sell_order_number']])
+            
+            
 if __name__ == '__main__':
     format = '%(asctime)s %(name)s %(levelname)s [%(funcName)s] %(message)s'
     logging.basicConfig(level=logging.DEBUG, format=format)
