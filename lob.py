@@ -133,7 +133,12 @@ class LimitOrderBook(object):
             elif order['activity_type'] == 3:
                 self.cancel(order)
             elif order['activity_type'] == 4:
-                self.modify(order)
+                # XXX It seems that a few market orders are listed as modify orders;
+                # temporarily treat them as add operations XXX                  
+                if order['mkt_flag'] == 'Y':
+                    self.add(order)
+                else:    
+                    self.modify(order)
             else:
                 raise ValueError('unrecognized activity type %i' % order['activity_type'])
 
@@ -405,8 +410,8 @@ class LimitOrderBook(object):
                     # removing orders from the queue until the entire requested
                     # volume has been satisfied:
                     elif curr_order['volume_original'] < volume_original:
-                        self.record_trade(order['trans_date'],
-                                          order['trans_time'],
+                        self.record_trade(new_order['trans_date'],
+                                          new_order['trans_time'],
                                           best_price,
                                           curr_order['volume_original'],
                                           buy_order['order_number'],
