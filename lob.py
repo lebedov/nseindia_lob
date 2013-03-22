@@ -376,8 +376,10 @@ class LimitOrderBook(object):
 
         indicator = new_order['buy_sell_indicator']
         volume_original = new_order['volume_original']
-        volume_disclosed = new_order['volume_disclosed']           
+        volume_disclosed = new_order['volume_disclosed']
 
+        self.logger.info('attempting add of order %s' % new_order['order_number'])
+        
         # If the buy/sell order is a market order, check whether there is a
         # corresponding limit order in the book at the best ask/bid price:
         if new_order['mkt_flag'] == 'Y':
@@ -581,6 +583,8 @@ class LimitOrderBook(object):
         Modify the order with matching order number in the LOB.
         """
 
+        self.logger.info('attempting modify of order %s' % new_order['order_number'])
+        
         # This exception should never be thrown:
         if new_order['mkt_flag'] == 'Y':
             raise ValueError('cannot modify market order')
@@ -627,25 +631,24 @@ class LimitOrderBook(object):
                     od[order_number] = new_order
                     
                 # If the modify increases the original or disclosed volume of an
-                # order, remove it and resubmit it to the queue:
+                # order, add a order containing the difference in volume between
+                # the original and new orders:
                 elif new_order['volume_original'] > old_order['volume_original']:
                     self.logger.info('modified order %i original volume from %f to %f: ' % \
                                      (order_number,
                                       old_order['volume_original'],
                                       new_order['volume_original']))
-                    self.delete_order(old_order['buy_sell_indicator'],
-                                      old_order['limit_price'],
-                                      order_number)
-                    self.add(new_order)
+                    new_order_modified = new_order.copy()
+                    new_order_modified['volume_original'] -= old_order['volume_original']
+                    self.add(new_order_modified)
                 elif new_order['volume_disclosed'] > old_order['volume_disclosed']:
                     self.logger.info('modified order %i disclosed volume from %f to %f: ' % \
                                      (order_number,
                                       old_order['volume_disclosed'],
                                       new_order['volume_disclosed']))
-                    self.delete_order(old_order['buy_sell_indicator'],
-                                      old_order['limit_price'],
-                                      order_number)
-                    self.add(new_order)
+                    new_order_modified = new_order.copy()
+                    new_order_modified['volume_disclosed'] -= old_order['volume_disclosed']
+                    self.add(new_order_modified)
                 else:
                     self.logger.info('undefined modify scenario')
         else:
@@ -662,6 +665,8 @@ class LimitOrderBook(object):
 
         """
 
+        self.logger.info('attempting cancel of order %s' % order['order_number'])
+        
         # This exception should never be thrown:
         if order['mkt_flag'] == 'Y':
             raise ValueError('cannot cancel market order')
