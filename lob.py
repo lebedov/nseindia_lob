@@ -149,11 +149,36 @@ class LimitOrderBook(object):
                 raise ValueError('unrecognized activity type %i' % \
                                  order['activity_type'])
 
-            # Save the best bid and ask:
+            # Save the best bid and ask, along with the associated order volumes
+            # at the corresponding price levels:
             date_time = order['trans_date']+' '+order['trans_time']
-            self._best_prices[BID][date_time] = self.best_bid_price()
-            self._best_prices[ASK][date_time] = self.best_ask_price()
+            best_bid_price = self.best_bid_price()
             
+            if best_bid_price is not None:
+                od = self.price_level(BID, best_bid_price)
+                volume_original = \
+                  sum([order['volume_original'] for order in od.itervalues()])
+                volume_disclosed = \
+                  sum([order['volume_disclosed'] for order in od.itervalues()])
+            else:
+                volume_original = 0.0
+                volume_disclosed = 0.0
+            self._best_prices[BID][date_time] = \
+              (best_bid_price, volume_original, volume_disclosed)
+               
+            best_ask_price = self.best_ask_price()            
+            if best_ask_price is not None:
+                od = self.price_level(ASK, best_ask_price)
+                volume_original = \
+                  sum([order['volume_original'] for order in od.itervalues()])
+                volume_disclosed = \
+                  sum([order['volume_disclosed'] for order in od.itervalues()])
+            else:
+                volume_original = 0.0
+                volume_disclosed = 0.0
+            self._best_prices[ASK][date_time] = \
+              (best_ask_price, volume_original, volume_disclosed)
+                           
     def create_level(self, indicator, price):
         """
         Create a new empty price level queue.
@@ -361,8 +386,8 @@ class LimitOrderBook(object):
                     buy_order = new_order
                     best_price = self.best_ask_price()
 
-                    # Sell/buy market orders cannot be processed until there is at least
-                    # one bid/ask limit order in the book:
+                    # Sell/buy market orders cannot be processed until there is
+                    # at least one bid/ask limit order in the book:
                     if best_price is None:
                         self.logger.info('no sell limit orders in book yet')
                     od = self.price_level(ASK, best_price) 
@@ -370,10 +395,10 @@ class LimitOrderBook(object):
                     sell_order = new_order
                     best_price = self.best_bid_price()
 
-                    # Sell/buy market orders cannot be processed until there is at least
-                    # one bid/ask limit order in the book:
+                    # Sell/buy market orders cannot be processed until there is
+                    # at least one bid/ask limit order in the book:
                     if best_price is None:
-                        self.logger.info('no buy limit orders in book yet')                    
+                        self.logger.info('no buy limit orders in book yet') 
                     od = self.price_level(BID, best_price)
                 else:
                     RuntimeError('invalid buy/sell indicator')
@@ -686,7 +711,7 @@ class LimitOrderBook(object):
 
     def print_best_prices(self, indicator, file_name=None):
         """
-        Print best bids or asks.
+        Print best bids or asks and their associated volumes.
 
         Parameters
         ----------
@@ -704,8 +729,9 @@ class LimitOrderBook(object):
             f = open(file_name, 'wb')
             w = csv.writer(f)
         for entry in self._best_prices[indicator].iteritems():
-            date_time, price = entry
-            w.writerow([date_time, price])
+            date_time = entry[0]
+            price, volume_original, volume_disclosed = entry[1]
+            w.writerow([date_time, price, volume_original, volume_disclosed])
         if file_name is not None:
             f.close()
             
