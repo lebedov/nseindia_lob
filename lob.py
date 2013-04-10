@@ -86,13 +86,17 @@ class LimitOrderBook(object):
         self._book_data_hist[BID] = {}
         self._book_data_hist[ASK] = {}
         
-        # Counter used to assign unique identifiers to generated trades:
+        # Counters used to assign unique identifiers to generated events and
+        # trades:
+        self._event_counter = 1
         self._trade_counter = 1
         
-        # Trades performed as orders arrive are recorded in this data
-        # structure:
+        # Trades performed as orders arrive are recorded in this dictionary:
         self._trades = odict.odict()
 
+        # Events are stored in this dictionary:
+        self._events = odict.odict()
+        
         # The best bids and asks are stored in two dictionaries:
         self._best_prices = {}
         self._best_prices[BID] = odict.odict()
@@ -154,44 +158,53 @@ class LimitOrderBook(object):
                 raise ValueError('unrecognized activity type %i' % \
                                  order['activity_type'])
 
-    def save_best_bid_ask_data(self, date_time):
-        """
-        Save the best bid and ask price and total volume.
-        """
+    # def save_best_bid_ask_data(self, date_time):
+    #     """
+    #     Save the best bid and ask price and total volume.
+    #     """
 
-        # Save the best bid and ask, along with the associated order volumes
-        # at the corresponding price levels:
-        best_bid_price = self.best_bid_price()
+    #     # Save the best bid and ask, along with the associated order volumes
+    #     # at the corresponding price levels:
+    #     best_bid_price = self.best_bid_price()
 
-        if best_bid_price is not None:
-            od = self.price_level(BID, best_bid_price)
-            volume_original = \
-              sum([order['volume_original'] for order in od.itervalues()])
-            volume_disclosed = \
-              sum([order['volume_disclosed'] for order in od.itervalues()])
-        else:
-            volume_original = volume_disclosed = 0.0
-        self._best_prices[BID][date_time] = \
-          (best_bid_price, volume_original, volume_disclosed)
+    #     if best_bid_price is not None:
+    #         od = self.price_level(BID, best_bid_price)
+    #         volume_original = \
+    #           sum([order['volume_original'] for order in od.itervalues()])
+    #         volume_disclosed = \
+    #           sum([order['volume_disclosed'] for order in od.itervalues()])
+    #     else:
+    #         volume_original = volume_disclosed = 0.0
+    #     self._best_prices[BID][date_time] = \
+    #       (best_bid_price, volume_original, volume_disclosed)
 
-        best_ask_price = self.best_ask_price()            
-        if best_ask_price is not None:
-            od = self.price_level(ASK, best_ask_price)
-            volume_original = \
-              sum([order['volume_original'] for order in od.itervalues()])
-            volume_disclosed = \
-              sum([order['volume_disclosed'] for order in od.itervalues()])
-        else:
-            volume_original = volume_disclosed = 0.0
-        self._best_prices[ASK][date_time] = \
-          (best_ask_price, volume_original, volume_disclosed)
+    #     best_ask_price = self.best_ask_price()            
+    #     if best_ask_price is not None:
+    #         od = self.price_level(ASK, best_ask_price)
+    #         volume_original = \
+    #           sum([order['volume_original'] for order in od.itervalues()])
+    #         volume_disclosed = \
+    #           sum([order['volume_disclosed'] for order in od.itervalues()])
+    #     else:
+    #         volume_original = volume_disclosed = 0.0
+    #     self._best_prices[ASK][date_time] = \
+    #       (best_ask_price, volume_original, volume_disclosed)
 
     def save_book_data(self, date_time):
+        """
+        Save a full copy of the bid and ask parts of the limit order book.
+
+        Notes
+        -----
+        This can potentially consume memory very rapidly; it should probably be
+        replaced with a disk-based mechanism.
+        
+        """
         self._book_data_hist[BID][date_time] = \
           copy.deepcopy(self._book_data[BID])
         self._book_data_hist[ASK][date_time] = \
           copy.deepcopy(self._book_data[ASK])
-        
+
     def create_level(self, indicator, price):
         """
         Create a new empty price level queue.
@@ -285,6 +298,30 @@ class LimitOrderBook(object):
                 raise RuntimeError('empty price level detected')
             return best_price
 
+    def best_bid_quantity(self):
+        """
+        Return the total original and disclosed bid quantity.
+
+        Returns
+        -------
+        volume_original : int
+            Original volume.
+        volume_disclosed : int
+            Disclosed volume.
+       
+        """
+        
+        best_bid_price = self.best_bid_price()
+        if best_bid_price is not None:
+            od = self.price_level(BID, best_bid_price)
+            volume_original = \
+              sum([order['volume_original'] for order in od.itervalues()])
+            volume_disclosed = \
+              sum([order['volume_disclosed'] for order in od.itervalues()])
+        else:
+            volume_original = volume_disclosed = 0.0
+        return volume_original, volume_disclosed
+    
     def best_ask_price(self):
         """
         Return the best ask price defined in the book.
@@ -308,7 +345,31 @@ class LimitOrderBook(object):
             if not self._book_data[ASK][best_price]:
                 raise RuntimeError('empty price level detected')
             return best_price
-            
+
+    def best_ask_quantity(self):
+        """
+        Return the total original and disclosed ask quantity.
+
+        Returns
+        -------
+        volume_original : int
+            Original volume.
+        volume_disclosed : int
+            Disclosed volume.
+       
+        """
+        
+        best_ask_price = self.best_ask_price()
+        if best_ask_price is not None:
+            od = self.price_level(ASK, best_ask_price)
+            volume_original = \
+              sum([order['volume_original'] for order in od.itervalues()])
+            volume_disclosed = \
+              sum([order['volume_disclosed'] for order in od.itervalues()])
+        else:
+            volume_original = volume_disclosed = 0.0
+        return volume_original, volume_disclosed
+        
     def price_level(self, indicator, price):
         """
         Find a specified price level in the limit order book.
@@ -371,9 +432,30 @@ class LimitOrderBook(object):
         self.logger.info('recording trade %s; price: %f, quantity: %f' % \
                  (trade_number, trade_price, trade_quantity))
         date_time = trade_date+' '+trade_time
-        self.save_best_bid_ask_data(date_time)
-        self.save_book_data(date_time)
-       
+        #self.save_best_bid_ask_data(date_time)
+        #self.save_book_data(date_time)
+
+    def record_event(self, **kwargs):
+        """
+        This routine saves the specified event information.
+        """
+
+        # Events to record: cancel bid, cancel ask, add bid, add ask,
+        # Each entry contains:
+        # time, date, price, order number,
+        # action (add, modify, cancel), indicator (B or S),
+        # market order status (Y or N),
+        # original order quantity, disclosed
+        # quantity, best bid, best bid original volume, best bid disclosed volume,
+        # best ask, best ask original volume, best ask disclosed volume,
+        # trade data (dict)
+        # If a trade has not occurred, the trade data dict is empty;
+        # if a trade has occurred, the trade data dict contains:
+        # trade price, trade quantity, buy order number, sell order number
+
+        self._events[self._event_counter] = kwargs
+        self._event_counter += 1
+        
     def add(self, new_order):
         """
         Add the specified order to the LOB.
@@ -390,6 +472,26 @@ class LimitOrderBook(object):
         
         """
 
+        best_bid_volume_original, best_bid_volume_disclosed = \
+          self.best_bid_quantity()
+        best_ask_volume_original, best_ask_volume_disclosed = \
+          self.best_ask_quantity()
+        event = \
+          dict(time=new_order['trans_time'],
+               date=new_order['trans_date'],
+               price=new_order['limit_price'],
+               order_number=new_order['order_number'],
+               action='add',
+               indicator=new_order['buy_sell_indicator'],
+               mkt_flag=new_order['mkt_flag'],
+               volume_original=new_order['volume_original'],
+               volume_disclosed=new_order['volume_disclosed'],
+               best_bid=self.best_bid_price(),
+               best_bid_volume_original=best_bid_volume_original,
+               best_ask=self.best_ask_price(),
+               best_ask_volume_original=best_ask_volume_original,    
+               trade={})
+        
         indicator = new_order['buy_sell_indicator']
         volume_original = new_order['volume_original']
         volume_disclosed = new_order['volume_disclosed']
@@ -442,13 +544,21 @@ class LimitOrderBook(object):
                         self.logger.info('current limit order original volume '
                                          'vs. arriving market order original volume: '
                                          '%s = %s' % \
-                                         (curr_order['volume_original'], volume_original))
-                        self.record_trade(new_order['trans_date'],
-                                          new_order['trans_time'],
-                                          best_price,
-                                          volume_original,
-                                          buy_order['order_number'],
-                                          sell_order['order_number']) 
+                                         (curr_order['volume_original'],
+                                          volume_original))
+                        trade = dict(trade_price=best_price,
+                                     trade_quantity=volume_original,
+                                     buy_order_number=buy_order['order_number'],
+                                     sell_order_number=sell_order['order_number'])
+                        event['trade'] = trade
+                        self.record_event(**event)
+                        # self.record_trade(new_order['trans_date'],
+                        #                   new_order['trans_time'],
+                        #                   best_price,
+                        #                   volume_original,
+                        #                   buy_order['order_number'],
+                        #                   sell_order['order_number'])
+
                         self.delete_order(curr_order['buy_sell_indicator'],
                                           best_price, order_number)
                         volume_original = 0.0                 
@@ -461,13 +571,21 @@ class LimitOrderBook(object):
                         self.logger.info('current limit order original volume '
                                          'vs. arriving market order original volume: '
                                          '%s > %s' % \
-                                         (curr_order['volume_original'], volume_original))   
-                        self.record_trade(new_order['trans_date'],
-                                          new_order['trans_time'],
-                                          best_price,
-                                          curr_order['volume_original']-volume_original,
-                                          buy_order['order_number'],
-                                          sell_order['order_number'])
+                                         (curr_order['volume_original'],
+                                          volume_original))   
+                        trade = dict(trade_price=best_price,
+                                     trade_quantity=curr_order['volume_original']-volume_original,
+                                     buy_order_number=buy_order['order_number'],
+                                     sell_order_number=sell_order['order_number'])
+                        event['trade'] = trade
+                        self.record_event(**event)
+                        
+                        # self.record_trade(new_order['trans_date'],
+                        #                   new_order['trans_time'],
+                        #                   best_price,
+                        #                   curr_order['volume_original']-volume_original,
+                        #                   buy_order['order_number'],
+                        #                   sell_order['order_number'])
                         curr_order['volume_original'] -= volume_original
                         volume_original = 0.0
                         break
@@ -480,13 +598,20 @@ class LimitOrderBook(object):
                         self.logger.info('current limit order original volume '
                                          'vs. arriving market order original volume: '
                                          '%s < %s' % \
-                                         (curr_order['volume_original'], volume_original))                    
-                        self.record_trade(new_order['trans_date'],
-                                          new_order['trans_time'],
-                                          best_price,
-                                          curr_order['volume_original'],
-                                          buy_order['order_number'],
-                                          sell_order['order_number'])
+                                         (curr_order['volume_original'],
+                                          volume_original))                  
+                        trade = dict(trade_price=best_price,
+                                     trade_quantity=curr_order['volume_original'],
+                                     buy_order_number=buy_order['order_number'],
+                                     sell_order_number=sell_order['order_number'])
+                        event['trade'] = trade
+                        self.record_event(**event)
+                        # self.record_trade(new_order['trans_date'],
+                        #                   new_order['trans_time'],
+                        #                   best_price,
+                        #                   curr_order['volume_original'],
+                        #                   buy_order['order_number'],
+                        #                   sell_order['order_number'])
                         volume_original -= curr_order['volume_original']
                         self.delete_order(curr_order['buy_sell_indicator'],
                                           best_price, order_number)
@@ -526,7 +651,8 @@ class LimitOrderBook(object):
                                   new_order['buy_sell_indicator'],
                                   new_order['limit_price']))
                 od[new_order['order_number']] = new_order
-
+                self.record_event(**event)
+                
             # Try to match marketable orders with orders that are already in the
             # book:
             else:
@@ -564,13 +690,20 @@ class LimitOrderBook(object):
                             self.logger.info('current limit order original volume '
                                              'vs. arriving limit order original volume: '
                                              '%s = %s' % \
-                                             (curr_order['volume_original'], volume_original))       
-                            self.record_trade(new_order['trans_date'],
-                                              new_order['trans_time'],
-                                              best_price,
-                                              volume_original,
-                                              buy_order['order_number'],
-                                              sell_order['order_number'])
+                                             (curr_order['volume_original'],
+                                              volume_original))       
+                            trade = dict(trade_price=best_price,
+                                         trade_quantity=volume_original,
+                                         buy_order_number=buy_order['order_number'],
+                                         sell_order_number=sell_order['order_number'])
+                            event['trade'] = trade
+                            self.record_event(**event)
+                            # self.record_trade(new_order['trans_date'],
+                            #                   new_order['trans_time'],
+                            #                   best_price,
+                            #                   volume_original,
+                            #                   buy_order['order_number'],
+                            #                   sell_order['order_number'])
                             self.delete_order(curr_order['buy_sell_indicator'],
                                               best_price, order_number)
                             volume_original = 0.0
@@ -583,13 +716,20 @@ class LimitOrderBook(object):
                             self.logger.info('current limit order original volume '
                                              'vs. arriving limit order original volume: '
                                              '%s > %s' % \
-                                             (curr_order['volume_original'], volume_original))    
-                            self.record_trade(new_order['trans_date'],
-                                              new_order['trans_time'],
-                                              best_price,
-                                              curr_order['volume_original']-volume_original,
-                                              buy_order['order_number'],
-                                              sell_order['order_number'])
+                                             (curr_order['volume_original'],
+                                              volume_original))    
+                            trade = dict(trade_price=best_price,
+                                         trade_quantity=curr_order['volume_original']-volume_original,
+                                         buy_order_number=buy_order['order_number'],
+                                         sell_order_number=sell_order['order_number'])
+                            event['trade'] = trade
+                            self.record_event(**event)
+                            # self.record_trade(new_order['trans_date'],
+                            #                   new_order['trans_time'],
+                            #                   best_price,
+                            #                   curr_order['volume_original']-volume_original,
+                            #                   buy_order['order_number'],
+                            #                   sell_order['order_number'])
                             curr_order['volume_original'] -= volume_original
                             volume_original = 0.0
                             break
@@ -602,13 +742,21 @@ class LimitOrderBook(object):
                             self.logger.info('current limit order original volume '
                                              'vs. arriving limit order original volume: '
                                              '%s < %s' % \
-                                             (curr_order['volume_original'], volume_original))     
-                            self.record_trade(new_order['trans_date'],
-                                              new_order['trans_time'],
-                                              best_price,
-                                              curr_order['volume_original'],
-                                              buy_order['order_number'],
-                                              sell_order['order_number'])
+                                             (curr_order['volume_original'],
+                                              volume_original))     
+                            trade = dict(trade_price=best_price,
+                                         trade_quantity=volume_original,
+                                         buy_order_number=buy_order['order_number'],
+                                         sell_order_number=sell_order['order_number'])
+                            event['trade'] = trade
+                            self.record_event(**event)
+                            
+                            # self.record_trade(new_order['trans_date'],
+                            #                   new_order['trans_time'],
+                            #                   best_price,
+                            #                   curr_order['volume_original'],
+                            #                   buy_order['order_number'],
+                            #                   sell_order['order_number'])
                             volume_original -= curr_order['volume_original']
                             self.delete_order(curr_order['buy_sell_indicator'],
                                               best_price, order_number)
@@ -626,9 +774,29 @@ class LimitOrderBook(object):
         Modify the order with matching order number in the LOB.
         """
 
+        best_bid_volume_original, best_bid_volume_disclosed = \
+          self.best_bid_quantity()
+        best_ask_volume_original, best_ask_volume_disclosed = \
+          self.best_ask_quantity()         
+        event = \
+          dict(time=new_order['trans_time'],
+               date=new_order['trans_date'],
+               price=new_order['limit_price'],
+               order_number=new_order['order_number'],
+               action='modify',
+               indicator=new_order['buy_sell_indicator'],
+               mkt_flag=new_order['mkt_flag'],
+               volume_original=new_order['volume_original'],
+               volume_disclosed=new_order['volume_disclosed'],
+               best_bid=self.best_bid_price(),
+               best_bid_volume_original=best_bid_volume_original,
+               best_ask=self.best_ask_price(),
+               best_ask_volume_original=best_ask_volume_original,    
+               trade={})
+
         self.logger.info('attempting modify of order: %s, %s' % \
                          (new_order['order_number'],
-                         new_order['buy_sell_indicator'])) 
+                         new_order['buy_sell_indicator']))
         
         # This exception should never be thrown:
         if new_order['mkt_flag'] == 'Y':
@@ -698,7 +866,9 @@ class LimitOrderBook(object):
                     self.logger.info('undefined modify scenario')
         else:
             self.logger.info('no matching price level found')
-                
+
+        self.record_event(**event)
+        
     def cancel(self, order):
         """
         Remove the order with matching order number from the LOB.
@@ -709,8 +879,28 @@ class LimitOrderBook(object):
             Order to cancel.
 
         """
+                
+        best_bid_volume_original, best_bid_volume_disclosed = \
+          self.best_bid_quantity()
+        best_ask_volume_original, best_ask_volume_disclosed = \
+          self.best_ask_quantity()         
+        event = \
+          dict(time=order['trans_time'],
+               date=order['trans_date'],
+               price=order['limit_price'],
+               order_number=order['order_number'],
+               action='cancel',
+               indicator=order['buy_sell_indicator'],
+               mkt_flag=order['mkt_flag'],
+               volume_original=order['volume_original'],
+               volume_disclosed=order['volume_disclosed'],
+               best_bid=self.best_bid_price(),
+               best_bid_volume_original=best_bid_volume_original,
+               best_ask=self.best_ask_price(),
+               best_ask_volume_original=best_ask_volume_original,    
+               trade={})
 
-        self.logger.info('attempting cancel of order %s' % order['order_number'])
+        self.logger.info('attempting cancel of order %s' % order['order_number']) 
         
         # This exception should never be thrown:
         if order['mkt_flag'] == 'Y':
@@ -734,6 +924,12 @@ class LimitOrderBook(object):
         else:
             self.logger.info('no matching price level found')
 
+        best_bid_volume_original, best_bid_volume_disclosed = \
+            self.best_bid_quantity()
+        best_ask_volume_original, best_ask_volume_disclosed = \
+            self.best_ask_quantity()            
+        self.record_event(**event)
+                                                    
     def print_trades(self, file_name=None):
         """
         Print trades in CSV format.
@@ -759,43 +955,75 @@ class LimitOrderBook(object):
         if file_name is not None:
             f.close()
 
-    def print_best_prices(self, indicator, file_name=None):
-        """
-        Print best bids or asks and their associated volumes.
+    # def print_best_prices(self, indicator, file_name=None):
+    #     """
+    #     Print best bids or asks and their associated volumes.
 
-        Parameters
-        ----------
-        indicator : str
-            B for bid, S for ask.
-        file_name : str
-            Output file name. If no file is specified, the output is written to
-            stdout.
+    #     Parameters
+    #     ----------
+    #     indicator : str
+    #         B for bid, S for ask.
+    #     file_name : str
+    #         Output file name. If no file is specified, the output is written to
+    #         stdout.
         
-        """
+    #     """
 
+    #     if file_name is None:
+    #         w = csv.writer(sys.stdout)
+    #     else:
+    #         f = open(file_name, 'wb')
+    #         w = csv.writer(f)
+    #     for entry in self._best_prices[indicator].iteritems():
+    #         date_time = entry[0]
+    #         price, volume_original, volume_disclosed = entry[1]
+    #         w.writerow([date_time, price, volume_original, volume_disclosed])
+    #     if file_name is not None:
+    #         f.close()
+
+    # def print_book(self, book):
+    #     """
+    #     Print parts of the specified book dictionary in a neat manner.
+    #     """
+
+    #     for price in map(float, sorted(book.keys(), reverse=True)):
+    #         print '%06.2f: ' % price,
+    #         for order_number in book[price]:
+    #             order = book[price][order_number]
+    #             print '(%s,%s)' % (order['volume_original'], order['volume_disclosed']),
+    #         print ''
+
+    def print_events(self, file_name=None):
         if file_name is None:
             w = csv.writer(sys.stdout)
         else:
             f = open(file_name, 'wb')
             w = csv.writer(f)
-        for entry in self._best_prices[indicator].iteritems():
-            date_time = entry[0]
-            price, volume_original, volume_disclosed = entry[1]
-            w.writerow([date_time, price, volume_original, volume_disclosed])
+        for entry in self._events.iteritems():
+            n = entry[0]
+            event = entry[1]
+            row = [event['time'],
+                   event['date'],
+                   event['price'],
+                   event['order_number'],
+                   event['action'],
+                   event['indicator'],
+                   event['mkt_flag'],
+                   event['volume_original'],
+                   event['volume_disclosed'],
+                   event['best_bid'],
+                   event['best_bid_volume_original'],
+                   event['best_ask'],
+                   event['best_ask_volume_original']]
+            trade = event['trade']
+            if trade:
+                row += [trade['trade_price'],
+                        trade['trade_quantity'],
+                        trade['buy_order_number'],
+                        trade['sell_order_number']]
+            w.writerow(row)
         if file_name is not None:
             f.close()
-
-    def print_book(self, book):
-        """
-        Print parts of the specified book dictionary in a neat manner.
-        """
-
-        for price in map(float, sorted(book.keys(), reverse=True)):
-            print '%06.2f: ' % price,
-            for order_number in book[price]:
-                order = book[price][order_number]
-                print '(%s,%s)' % (order['volume_original'], order['volume_disclosed']),
-            print ''
             
 if __name__ == '__main__':
     format = '%(asctime)s %(name)s %(levelname)s [%(funcName)s] %(message)s'
@@ -810,4 +1038,4 @@ if __name__ == '__main__':
     fh = logging.FileHandler('lob.log', 'w')
     fh.setFormatter(logging.Formatter(format))
     lob.logger.addHandler(fh)
-    lob.process(df[0:50])
+    lob.process(df[0:1000])
