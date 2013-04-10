@@ -86,14 +86,9 @@ class LimitOrderBook(object):
         self._book_data_hist[BID] = {}
         self._book_data_hist[ASK] = {}
         
-        # Counters used to assign unique identifiers to generated events and
-        # trades:
+        # Counter used to assign unique identifiers to generated events:
         self._event_counter = 1
-        self._trade_counter = 1
         
-        # Trades performed as orders arrive are recorded in this dictionary:
-        self._trades = odict.odict()
-
         # Events are stored in this dictionary:
         self._events = odict.odict()
         
@@ -116,7 +111,6 @@ class LimitOrderBook(object):
         self.logger.info('clearing outstanding limit orders')
         for d in self._book_data.keys():
             self._book_data[d].clear()
-        self._trade_counter = 1
         
     def process(self, df):
         """
@@ -858,31 +852,6 @@ class LimitOrderBook(object):
             self.best_ask_quantity()            
         self.record_event(**event)
                                                     
-    def print_trades(self, file_name=None):
-        """
-        Print trades in CSV format.
-
-        Parameters
-        ----------
-        file_name : str
-            Output file name. If no file is specified, the output is written to
-            stdout.
-        
-        """
-
-        if file_name is None:
-            w = csv.writer(sys.stdout)
-        else:
-            f = open(file_name, 'wb')
-            w = csv.writer(f)
-        for entry in self._trades.iteritems():
-            trade_number, trade = entry
-            w.writerow([trade_number, trade['trade_date'], trade['trade_time'], \
-              '%.2f' % trade['trade_price'], trade['trade_quantity'], \
-              trade['buy_order_number'], trade['sell_order_number']])
-        if file_name is not None:
-            f.close()
-
     # def print_best_prices(self, indicator, file_name=None):
     #     """
     #     Print best bids or asks and their associated volumes.
