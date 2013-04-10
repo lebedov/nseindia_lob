@@ -91,6 +91,11 @@ class LimitOrderBook(object):
         
         # Events are stored in this dictionary:
         self._events = odict.odict()
+
+        # Daily trade volume is stored in this dictionary:
+        self._trade_vol = {}
+        self._curr_trade_day = None
+        self._curr_trade_vol = 0
         
         # The best bids and asks are stored in two dictionaries:
         self._best_prices = {}
@@ -128,14 +133,23 @@ class LimitOrderBook(object):
             order = row[1].to_dict()
             self.logger.info('processing order: %i' % order['order_number'])
 
-            # Reset the limit order book when a new day of orders begins:
+            # Reset the limit order book and trade volume variables when a new
+            # day of orders begins:
             trans_date = datetime.datetime.strptime(order['trans_date'], '%m/%d/%Y')
             if day is None:
                 day = trans_date.day
                 self.logger.info('setting day: %s' % day)
+
+                self._curr_trade_day = order['trans_date']
+                self._curr_trade_vol = 0.0                
             elif day != trans_date.day:
                 self.logger.info('new day - book reset')
                 self.clear_book()
+
+                # Save total daily trade volume before resetting:
+                self._trade_vol[self._curr_trade_day] = self._curr_trade_vol
+                self._curr_trade_day = order['trans_date']
+                self._curr_trade_vol = 0.0
                 
             if order['activity_type'] == 1:
                 self.add(order)
@@ -152,6 +166,8 @@ class LimitOrderBook(object):
                 raise ValueError('unrecognized activity type %i' % \
                                  order['activity_type'])
 
+        self._trade_vol[self._curr_trade_day] = self._curr_trade_vol
+                                 
     # def save_best_bid_ask_data(self, date_time):
     #     """
     #     Save the best bid and ask price and total volume.
@@ -418,7 +434,12 @@ class LimitOrderBook(object):
 
         self._events[self._event_counter] = kwargs
         self._event_counter += 1
-        
+
+        # If a trade has occurred, its volume data is added to a variable that
+        # records total trade volume per day:
+        if kwargs['trade']:
+            self._curr_trade_vol += kwargs['trade']['trade_quantity']
+            
     def add(self, new_order):
         """
         Add the specified order to the LOB.
