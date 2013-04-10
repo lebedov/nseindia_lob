@@ -404,37 +404,6 @@ class LimitOrderBook(object):
             self.logger.info('price level found: %s, %f' % (indicator, price))
             return od
 
-    def record_trade(self, trade_date, trade_time, trade_price, trade_quantity,
-                     buy_order_number, sell_order_number):
-        """
-        Record a trade.
-
-        Parameters
-        ----------
-        trade_date : str
-        trade_time : str
-        trade_price : str
-        trade_quantity : str
-        buy_order_number : str
-        sell_order_number : str
-        
-        """
-        
-        trade = {'trade_date': trade_date,
-                 'trade_time': trade_time,
-                 'trade_price': trade_price,
-                 'trade_quantity': trade_quantity,
-                 'buy_order_number': buy_order_number,
-                 'sell_order_number': sell_order_number}
-        trade_number = '%08i' % self._trade_counter
-        self._trades[trade_number] = trade
-        self._trade_counter += 1
-        self.logger.info('recording trade %s; price: %f, quantity: %f' % \
-                 (trade_number, trade_price, trade_quantity))
-        date_time = trade_date+' '+trade_time
-        #self.save_best_bid_ask_data(date_time)
-        #self.save_book_data(date_time)
-
     def record_event(self, **kwargs):
         """
         This routine saves the specified event information.
@@ -552,13 +521,6 @@ class LimitOrderBook(object):
                                      sell_order_number=sell_order['order_number'])
                         event['trade'] = trade
                         self.record_event(**event)
-                        # self.record_trade(new_order['trans_date'],
-                        #                   new_order['trans_time'],
-                        #                   best_price,
-                        #                   volume_original,
-                        #                   buy_order['order_number'],
-                        #                   sell_order['order_number'])
-
                         self.delete_order(curr_order['buy_sell_indicator'],
                                           best_price, order_number)
                         volume_original = 0.0                 
@@ -579,13 +541,6 @@ class LimitOrderBook(object):
                                      sell_order_number=sell_order['order_number'])
                         event['trade'] = trade
                         self.record_event(**event)
-                        
-                        # self.record_trade(new_order['trans_date'],
-                        #                   new_order['trans_time'],
-                        #                   best_price,
-                        #                   curr_order['volume_original']-volume_original,
-                        #                   buy_order['order_number'],
-                        #                   sell_order['order_number'])
                         curr_order['volume_original'] -= volume_original
                         volume_original = 0.0
                         break
@@ -606,12 +561,6 @@ class LimitOrderBook(object):
                                      sell_order_number=sell_order['order_number'])
                         event['trade'] = trade
                         self.record_event(**event)
-                        # self.record_trade(new_order['trans_date'],
-                        #                   new_order['trans_time'],
-                        #                   best_price,
-                        #                   curr_order['volume_original'],
-                        #                   buy_order['order_number'],
-                        #                   sell_order['order_number'])
                         volume_original -= curr_order['volume_original']
                         self.delete_order(curr_order['buy_sell_indicator'],
                                           best_price, order_number)
@@ -698,12 +647,6 @@ class LimitOrderBook(object):
                                          sell_order_number=sell_order['order_number'])
                             event['trade'] = trade
                             self.record_event(**event)
-                            # self.record_trade(new_order['trans_date'],
-                            #                   new_order['trans_time'],
-                            #                   best_price,
-                            #                   volume_original,
-                            #                   buy_order['order_number'],
-                            #                   sell_order['order_number'])
                             self.delete_order(curr_order['buy_sell_indicator'],
                                               best_price, order_number)
                             volume_original = 0.0
@@ -724,12 +667,6 @@ class LimitOrderBook(object):
                                          sell_order_number=sell_order['order_number'])
                             event['trade'] = trade
                             self.record_event(**event)
-                            # self.record_trade(new_order['trans_date'],
-                            #                   new_order['trans_time'],
-                            #                   best_price,
-                            #                   curr_order['volume_original']-volume_original,
-                            #                   buy_order['order_number'],
-                            #                   sell_order['order_number'])
                             curr_order['volume_original'] -= volume_original
                             volume_original = 0.0
                             break
@@ -749,23 +686,14 @@ class LimitOrderBook(object):
                                          buy_order_number=buy_order['order_number'],
                                          sell_order_number=sell_order['order_number'])
                             event['trade'] = trade
-                            self.record_event(**event)
-                            
-                            # self.record_trade(new_order['trans_date'],
-                            #                   new_order['trans_time'],
-                            #                   best_price,
-                            #                   curr_order['volume_original'],
-                            #                   buy_order['order_number'],
-                            #                   sell_order['order_number'])
+                            self.record_event(**event)                            
                             volume_original -= curr_order['volume_original']
                             self.delete_order(curr_order['buy_sell_indicator'],
                                               best_price, order_number)
                         else:
 
                             # This should never be reached:
-                            pass
-                    
-                        
+                            pass                                            
         else:
             raise RuntimeError('invalid market order flag')
         
