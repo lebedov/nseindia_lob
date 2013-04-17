@@ -112,12 +112,7 @@ class LimitOrderBook(object):
         # Order interarrival times are stored in this dictionary:
         self._order_interarrival_time = {}
         self._curr_order_interarrival_time = None
-        
-        # The best bids and asks are stored in two dictionaries:
-        self._best_prices = {}
-        self._best_prices[BID] = odict.odict()
-        self._best_prices[ASK] = odict.odict()
-        
+                
     def clear_book(self):
         """
         Clear all outstanding limit orders from the book
@@ -199,38 +194,6 @@ class LimitOrderBook(object):
         self._daily_stats[self._curr_day] = \
             copy.copy(self._curr_daily_stats)
                                  
-    # def save_best_bid_ask_data(self, date_time):
-    #     """
-    #     Save the best bid and ask price and total volume.
-    #     """
-
-    #     # Save the best bid and ask, along with the associated order volumes
-    #     # at the corresponding price levels:
-    #     best_bid_price = self.best_bid_price()
-
-    #     if best_bid_price is not None:
-    #         od = self.price_level(BID, best_bid_price)
-    #         volume_original = \
-    #           sum([order['volume_original'] for order in od.itervalues()])
-    #         volume_disclosed = \
-    #           sum([order['volume_disclosed'] for order in od.itervalues()])
-    #     else:
-    #         volume_original = volume_disclosed = 0.0
-    #     self._best_prices[BID][date_time] = \
-    #       (best_bid_price, volume_original, volume_disclosed)
-
-    #     best_ask_price = self.best_ask_price()            
-    #     if best_ask_price is not None:
-    #         od = self.price_level(ASK, best_ask_price)
-    #         volume_original = \
-    #           sum([order['volume_original'] for order in od.itervalues()])
-    #         volume_disclosed = \
-    #           sum([order['volume_disclosed'] for order in od.itervalues()])
-    #     else:
-    #         volume_original = volume_disclosed = 0.0
-    #     self._best_prices[ASK][date_time] = \
-    #       (best_ask_price, volume_original, volume_disclosed)
-
     def save_book_data(self, date_time):
         """
         Save a full copy of the bid and ask parts of the limit order book.
@@ -948,32 +911,6 @@ class LimitOrderBook(object):
             self.best_ask_quantity()            
         self.record_event(**event)
                                                     
-    # def print_best_prices(self, indicator, file_name=None):
-    #     """
-    #     Print best bids or asks and their associated volumes.
-
-    #     Parameters
-    #     ----------
-    #     indicator : str
-    #         B for bid, S for ask.
-    #     file_name : str
-    #         Output file name. If no file is specified, the output is written to
-    #         stdout.
-        
-    #     """
-
-    #     if file_name is None:
-    #         w = csv.writer(sys.stdout)
-    #     else:
-    #         f = open(file_name, 'wb')
-    #         w = csv.writer(f)
-    #     for entry in self._best_prices[indicator].iteritems():
-    #         date_time = entry[0]
-    #         price, volume_original, volume_disclosed = entry[1]
-    #         w.writerow([date_time, price, volume_original, volume_disclosed])
-    #     if file_name is not None:
-    #         f.close()
-
     # def print_book(self, book):
     #     """
     #     Print parts of the specified book dictionary in a neat manner.
@@ -1032,4 +969,5 @@ if __name__ == '__main__':
     fh = logging.FileHandler('lob.log', 'w')
     fh.setFormatter(logging.Formatter(format))
     lob.logger.addHandler(fh)
-    lob.process(df[0:10000])
+    #lob.process(df[0:50000])
+    lob.process(df)
