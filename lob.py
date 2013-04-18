@@ -82,9 +82,9 @@ class LimitOrderBook(object):
         self._book_data[BID] = {}
         self._book_data[ASK] = {}
 
-        self._book_data_hist = {}
-        self._book_data_hist[BID] = {}
-        self._book_data_hist[ASK] = {}
+        # self._book_data_hist = {}
+        # self._book_data_hist[BID] = {}
+        # self._book_data_hist[ASK] = {}
         
         # Counter used to assign unique identifiers to generated events:
         self._event_counter = 1
@@ -128,15 +128,17 @@ class LimitOrderBook(object):
         for d in self._book_data.keys():
             self._book_data[d].clear()
         
-    def process(self, df):
+    def process(self, df, interactive=False):
         """
         Process order data
 
         Parameters
         ----------
         df : pandas.DataFrame
-           Each row of this DataFrame instance contains a single order.
-
+            Each row of this DataFrame instance contains a single order.
+        interactive : bool
+            Pause for user input command at each iteration.
+                  
         """
 
         day = None
@@ -190,24 +192,49 @@ class LimitOrderBook(object):
                 raise ValueError('unrecognized activity type %i' % \
                                  order['activity_type'])
 
+            if interactive:
+                while True:
+                    command = raw_input('[b,s,e,n]? ')
+                    if command == 'b':
+                        print 'buy queue:'
+                        self.print_book(self._book_data[BUY])
+                    elif command == 's':
+                        print 'sell queue:'
+                        self.print_book(self._book_data[SELL])
+                    elif command == 'e':
+                        print self.event_to_row(self._events[self._events.lastkey()])
+                    elif command == 'n':
+                        break
+            else:
+                print '----------------------------------------'
+                
+                # Print last event:
+                print self.event_to_row(self._events[self._events.lastkey()])
+
+                # Print queue states:
+                print 'sell queue:'
+                self.print_book(self._book_data[SELL])
+                print 'buy queue:'
+                self.print_book(self._book_data[BUY])
+                
         # Save current stats when no more orders are available:
         self._daily_stats[self._curr_day] = \
             copy.copy(self._curr_daily_stats)
                                  
-    def save_book_data(self, date_time):
-        """
-        Save a full copy of the bid and ask parts of the limit order book.
+    # def save_book_data(self, date_time):
+    #     """
+    #     Save a full copy of the bid and ask parts of the limit order book.
 
-        Notes
-        -----
-        This can potentially consume memory very rapidly; it should probably be
-        replaced with a disk-based mechanism.
+    #     Notes
+    #     -----
+    #     This can potentially consume memory very rapidly; it should probably be
+    #     replaced with a disk-based mechanism.
         
-        """
-        self._book_data_hist[BID][date_time] = \
-          copy.deepcopy(self._book_data[BID])
-        self._book_data_hist[ASK][date_time] = \
-          copy.deepcopy(self._book_data[ASK])
+    #     """
+    #     self._book_data_hist[BID][date_time] = \
+    #       copy.deepcopy(self._book_data[BID])
+    #     self._book_data_hist[ASK][date_time] = \
+    #       copy.deepcopy(self._book_data[ASK])
 
     def create_level(self, indicator, price):
         """
@@ -402,10 +429,10 @@ class LimitOrderBook(object):
         try:
             od = book[price]
         except KeyError:
-            self.logger.info('price level not found: %s, %f' % (indicator, price))
+            #self.logger.info('price level not found: %s, %f' % (indicator, price))
             return None
         else:
-            self.logger.info('price level found: %s, %f' % (indicator, price))
+            #self.logger.info('price level found: %s, %f' % (indicator, price))
             return od
 
     def record_event(self, **kwargs):
@@ -676,10 +703,10 @@ class LimitOrderBook(object):
                     # oldest to newest:
                     for order_number in od.keys():                    
                         curr_order = od[order_number]
-                        if curr_order['buy_sell_indicator'] == BUY:
-                            buy_order = curr_order
-                        elif curr_order['buy_sell_indicator'] == SELL:
+                        if indicator == BUY:
                             sell_order = curr_order
+                        elif indicator == SELL:
+                            buy_order = curr_order
                         else:
                             RuntimeError('invalid buy/sell indicator')
 
@@ -905,24 +932,43 @@ class LimitOrderBook(object):
         else:
             self.logger.info('no matching price level found')
 
-        best_bid_volume_original, best_bid_volume_disclosed = \
-            self.best_bid_quantity()
-        best_ask_volume_original, best_ask_volume_disclosed = \
-            self.best_ask_quantity()            
         self.record_event(**event)
                                                     
-    # def print_book(self, book):
-    #     """
-    #     Print parts of the specified book dictionary in a neat manner.
-    #     """
+    def print_book(self, book):
+        """
+        Print parts of the specified book dictionary in a neat manner.
+        """
 
-    #     for price in map(float, sorted(book.keys(), reverse=True)):
-    #         print '%06.2f: ' % price,
-    #         for order_number in book[price]:
-    #             order = book[price][order_number]
-    #             print '(%s,%s)' % (order['volume_original'], order['volume_disclosed']),
-    #         print ''
+        for price in map(float, sorted(book.keys(), reverse=True)):
+            print '%06.2f: ' % price,
+            for order_number in book[price]:
+                order = book[price][order_number]
+                print '(%s,%s)' % (order['volume_original'], order['volume_disclosed']),
+            print ''
 
+    def event_to_row(self, event):
+        row = [event['time'],
+               event['date'],
+               event['price'],
+               event['order_number'],
+               event['is_original'],
+               event['action'],
+               event['indicator'],
+               event['mkt_flag'],
+               event['volume_original'],
+               event['volume_disclosed'],
+               event['best_bid'],
+               event['best_bid_volume_original'],
+               event['best_ask'],
+               event['best_ask_volume_original']]
+        trade = event['trade']
+        if trade:
+            row += [trade['trade_price'],
+                    trade['trade_quantity'],
+                    trade['buy_order_number'],
+                    trade['sell_order_number']]
+        return row
+    
     def print_events(self, file_name=None):
         if file_name is None:
             w = csv.writer(sys.stdout)
@@ -932,26 +978,7 @@ class LimitOrderBook(object):
         for entry in self._events.iteritems():
             n = entry[0]
             event = entry[1]
-            row = [event['time'],
-                   event['date'],
-                   event['price'],
-                   event['order_number'],
-                   event['is_original'],
-                   event['action'],
-                   event['indicator'],
-                   event['mkt_flag'],
-                   event['volume_original'],
-                   event['volume_disclosed'],
-                   event['best_bid'],
-                   event['best_bid_volume_original'],
-                   event['best_ask'],
-                   event['best_ask_volume_original']]
-            trade = event['trade']
-            if trade:
-                row += [trade['trade_price'],
-                        trade['trade_quantity'],
-                        trade['buy_order_number'],
-                        trade['sell_order_number']]
+            row = self.event_to_row(event)
             w.writerow(row)
         if file_name is not None:
             f.close()
@@ -959,15 +986,19 @@ class LimitOrderBook(object):
 if __name__ == '__main__':
     format = '%(asctime)s %(name)s %(levelname)s [%(funcName)s] %(message)s'
     logging.basicConfig(level=logging.DEBUG, format=format)
-    file_name = 'AXISBANK-orders.csv'
 
-    df = pandas.read_csv(file_name,
-                         names=col_names,
-                         nrows=10000)
-
+    # Remove root log handlers:
+    for h in logging.root.handlers:
+        logging.root.removeHandler(h)
+                         
     lob = LimitOrderBook()
     fh = logging.FileHandler('lob.log', 'w')
     fh.setFormatter(logging.Formatter(format))
     lob.logger.addHandler(fh)
-    #lob.process(df[0:50000])
-    lob.process(df)
+
+    file_name = 'AXISBANK-orders.csv'
+    tp = pandas.read_csv(file_name,
+                         names=col_names,
+                         iterator=True)
+    for i in xrange(1):
+        lob.process(tp.get_chunk(50))
