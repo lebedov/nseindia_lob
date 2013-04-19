@@ -146,7 +146,8 @@ class LimitOrderBook(object):
         """
 
         self.show_output = show_output
-        
+
+        expiry_date = ''
         day = None
         for row in df.iterrows():
             order = row[1].to_dict()
@@ -182,7 +183,19 @@ class LimitOrderBook(object):
                     copy.copy(self.curr_daily_stats)
                 self._curr_daily_stats = \
                     copy.copy(self._init_daily_stats)
-                
+
+            # Restrict all orders processed to a single expiry date because
+            # futures orders with different expiry dates are effectively
+            # distinct securities insofar as the LOB is concerned:
+            if not expiry_date:
+                self.logger.info('setting expiry date: %s' % expiry_date)
+                expiry_date = order['expiry_date']                
+            else:
+                if expiry_date != order['expiry_date']:
+                    self.logger.info('skipping order %s with expiry date %s' % \
+                                     (order['order_number'], order['expiry_date']))
+                    continue
+                    
             if order['activity_type'] == 1:
                 self.add(order, 'Y')
             elif order['activity_type'] == 3:
