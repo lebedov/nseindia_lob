@@ -1012,7 +1012,8 @@ class LimitOrderBook(object):
                event['best_ask_volume_original']]
         trade = event['trade']
         if trade:
-            row += [trade['trade_price'],
+            row += ['trade',
+                    trade['trade_price'],
                     trade['trade_quantity'],
                     trade['buy_order_number'],
                     trade['sell_order_number']]
