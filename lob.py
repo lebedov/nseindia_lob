@@ -585,6 +585,16 @@ class LimitOrderBook(object):
                 else:
                     RuntimeError('invalid buy/sell indicator')
 
+                # If there is still residual volume but the best price is no
+                # longer compatible with that of the arriving order, stop
+                # trying to match orders:
+                if indicator == BUY and best_price > new_order['limit_price']:
+                    self.logger.info('best ask exceeds specified buy price')
+                    break
+                if indicator == SELL and best_price < new_order['limit_price']:
+                    self.logger.info('best bid is below specified sell price')
+                    break
+                
                 # Move through the limit orders in the price level queue from oldest
                 # to newest:
                 for order_number in od.keys():
@@ -714,6 +724,23 @@ class LimitOrderBook(object):
                         od = self.price_level(BID, best_price)
                     else:
                         RuntimeError('invalid buy/sell indicator')
+
+                    # If there is still residual volume but the best price is no
+                    # longer compatible with that of the arriving order, stop
+                    # trying to match orders and save the residue as a new limit
+                    # order:
+                    if indicator == BUY and best_price > new_order['limit_price']:
+                        self.logger.info('best ask exceeds specified buy price')
+                        if new_order['io_flag'] == 'N':
+                            new_order['volume_original'] = volume_original
+                            self.add(new_order, 'N')
+                        break
+                    if indicator == SELL and best_price < new_order['limit_price']:
+                        self.logger.info('best bid is below specified sell price')
+                        if new_order['io_flag'] == 'N':
+                            new_order['volume_original'] = volume_original
+                            self.add(new_order, 'N')
+                        break
 
                     # Move through the limit orders in the price level queue from
                     # oldest to newest:
@@ -1023,4 +1050,4 @@ if __name__ == '__main__':
                          names=col_names,
                          iterator=True)
     for i in xrange(1):
-        lob.process(tp.get_chunk(50))
+        lob.process(tp.get_chunk(200))
