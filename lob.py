@@ -594,10 +594,22 @@ class LimitOrderBook(object):
                 if indicator == SELL and best_price < new_order['limit_price']:
                     self.logger.info('best bid is below specified sell price')
                     break
-                
+
+                # Orders in the book that have explicitly disclosed (i.e.,
+                # non-zero) volumes must be processed before others; hence, we
+                # need to reorder the orders in the identified price level to
+                # list all orders with disclosed volumes before the others:
+                order_number_list = []
+                for order_number in od.keys():
+                    if od[order_number]['volume_disclosed'] > 0:
+                        order_number_list.append(order_number)
+                for order_number in od.keys():
+                    if od[order_number]['volume_disclosed'] == 0:
+                        order_number_list.append(order_number)
+                        
                 # Move through the limit orders in the price level queue from oldest
                 # to newest:
-                for order_number in od.keys():
+                for order_number in order_number_list:
                     curr_order = od[order_number]
                     if curr_order['buy_sell_indicator'] == BUY:
                         buy_order = curr_order
@@ -742,9 +754,21 @@ class LimitOrderBook(object):
                             self.add(new_order, 'N')
                         break
 
+                    # Orders in the book that have explicitly disclosed (i.e.,
+                    # non-zero) volumes must be processed before others; hence, we
+                    # need to reorder the orders in the identified price level to
+                    # list all orders with disclosed volumes before the others:
+                    order_number_list = []
+                    for order_number in od.keys():
+                        if od[order_number]['volume_disclosed'] > 0:
+                            order_number_list.append(order_number)
+                    for order_number in od.keys():
+                        if od[order_number]['volume_disclosed'] == 0:
+                            order_number_list.append(order_number)
+                    
                     # Move through the limit orders in the price level queue from
                     # oldest to newest:
-                    for order_number in od.keys():                    
+                    for order_number in order_number_list: 
                         curr_order = od[order_number]
                         if indicator == BUY:
                             sell_order = curr_order
