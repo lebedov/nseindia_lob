@@ -601,10 +601,10 @@ class LimitOrderBook(object):
                 # list all orders with disclosed volumes before the others:
                 order_number_list = []
                 for order_number in od.keys():
-                    if od[order_number]['volume_disclosed'] > 0:
+                    if od[order_number]['volume_disclosed'] == 0:
                         order_number_list.append(order_number)
                 for order_number in od.keys():
-                    if od[order_number]['volume_disclosed'] == 0:
+                    if od[order_number]['volume_disclosed'] > 0:
                         order_number_list.append(order_number)
                         
                 # Move through the limit orders in the price level queue from oldest
@@ -760,10 +760,10 @@ class LimitOrderBook(object):
                     # list all orders with disclosed volumes before the others:
                     order_number_list = []
                     for order_number in od.keys():
-                        if od[order_number]['volume_disclosed'] > 0:
+                        if od[order_number]['volume_disclosed'] == 0:
                             order_number_list.append(order_number)
                     for order_number in od.keys():
-                        if od[order_number]['volume_disclosed'] == 0:
+                        if od[order_number]['volume_disclosed'] > 0:
                             order_number_list.append(order_number)
                     
                     # Move through the limit orders in the price level queue from
