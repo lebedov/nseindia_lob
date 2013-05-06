@@ -96,6 +96,10 @@ class LimitOrderBook(object):
         # Events are stored in this dictionary:
         self._events = odict.odict()
 
+        # Events are written to this file:
+        self._events_log_file = open('events.log', 'w')
+        self._events_writer = csv.writer(self._events_log_file)
+        
         # Accumulated data for daily stats is stored in this dictionary:        
         self._daily_stats = {}
         self._init_daily_stats = {
@@ -116,7 +120,13 @@ class LimitOrderBook(object):
         # Order interarrival times are stored in this dictionary:
         self._order_interarrival_time = {}
         self._curr_order_interarrival_time = None
-                
+
+    def __del__(self):
+        try:
+            self._events_log_file.close()
+        except:
+            pass
+            
     def clear_book(self):
         """
         Clear all outstanding limit orders from the book
@@ -132,7 +142,7 @@ class LimitOrderBook(object):
         for d in self._book_data.keys():
             self._book_data[d].clear()
         
-    def process(self, df, show_output=True):
+    def process(self, df, show_output=True, log_events=True):
         """
         Process order data
 
@@ -146,7 +156,8 @@ class LimitOrderBook(object):
         """
 
         self.show_output = show_output
-
+        self.log_events = log_events
+        
         expiry_date = ''
         day = None
         for row in df.iterrows():
@@ -509,7 +520,13 @@ class LimitOrderBook(object):
             self.print_book(self._book_data[SELL])
             print 'buy queue:'
             self.print_book(self._book_data[BUY])
-                    
+
+        if self.log_events:            
+            n = self._events.lastkey()
+            event = self._events[n]
+            row = self.event_to_row(event)
+            self._events_writer.writerow(row)
+            
     def add(self, new_order, is_original):
         """
         Add the specified order to the LOB.
@@ -601,10 +618,10 @@ class LimitOrderBook(object):
                 # list all orders with disclosed volumes before the others:
                 order_number_list = []
                 for order_number in od.keys():
-                    if od[order_number]['volume_disclosed'] == 0:
+                    if od[order_number]['volume_disclosed'] > 0:
                         order_number_list.append(order_number)
                 for order_number in od.keys():
-                    if od[order_number]['volume_disclosed'] > 0:
+                    if od[order_number]['volume_disclosed'] == 0:
                         order_number_list.append(order_number)
                         
                 # Move through the limit orders in the price level queue from oldest
@@ -760,10 +777,10 @@ class LimitOrderBook(object):
                     # list all orders with disclosed volumes before the others:
                     order_number_list = []
                     for order_number in od.keys():
-                        if od[order_number]['volume_disclosed'] == 0:
+                        if od[order_number]['volume_disclosed'] > 0:
                             order_number_list.append(order_number)
                     for order_number in od.keys():
-                        if od[order_number]['volume_disclosed'] > 0:
+                        if od[order_number]['volume_disclosed'] == 0:
                             order_number_list.append(order_number)
                     
                     # Move through the limit orders in the price level queue from
@@ -916,7 +933,7 @@ class LimitOrderBook(object):
                 elif new_order['volume_original'] < old_order['volume_original'] or \
                     new_order['volume_disclosed'] < old_order['volume_disclosed']:
                     self.logger.info('modified order %i (original, disclosed) volume '                    
-                                     'from (%f, %f) to (%f, %f): ' % \
+                                     'from (%i, %i) to (%i, %i)' % \
                                      (new_order['order_number'],
                                       old_order['volume_original'], old_order['volume_disclosed'],
                                       new_order['volume_original'], new_order['volume_disclosed']))
@@ -929,8 +946,8 @@ class LimitOrderBook(object):
                 # the original and new orders:
                 elif new_order['volume_original'] > old_order['volume_original'] or \
                     new_order['volume_disclosed'] > old_order['volume_disclosed']:
-                    self.logger.info('modified order %i (original, disclosed) volume ',                    
-                                     'from (%f, %f) to (%f, %f): ' % \
+                    self.logger.info('modified order %i (original, disclosed) volume '
+                                     'from (%i, %i) to (%i, %i)' % \
                                      (new_order['order_number'],
                                       old_order['volume_original'], old_order['volume_disclosed'],
                                       new_order['volume_original'], new_order['volume_disclosed']))
@@ -1074,4 +1091,13 @@ if __name__ == '__main__':
                          names=col_names,
                          iterator=True)
     for i in xrange(2):
-        lob.process(tp.get_chunk(200))
+        data = tp.get_chunk(200)
+        lob.process(data)
+    # while True:
+    #     try:
+    #         data = tp.get_chunk(200)
+    #     except StopIteration:
+    #         break
+    #     else:
+    #         lob.process(data)
+            
