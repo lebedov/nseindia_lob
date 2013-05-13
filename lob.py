@@ -82,10 +82,10 @@ class LimitOrderBook(object):
         self._book_data[BID] = {}
         self._book_data[ASK] = {}
 
-        # self._book_data_hist = {}
-        # self._book_data_hist[BID] = {}
-        # self._book_data_hist[ASK] = {}
-        
+        # This dictionary maps the IDs of orders that are in the book to their
+        # price level:
+        self._book_orders_to_price = {}
+                
         # Counter used to assign unique identifiers to generated events:
         self._event_counter = 1
 
@@ -225,21 +225,6 @@ class LimitOrderBook(object):
         # Save current stats when no more orders are available:
         self._daily_stats[self._curr_day] = \
             copy.copy(self._curr_daily_stats)
-                                 
-    # def save_book_data(self, date_time):
-    #     """
-    #     Save a full copy of the bid and ask parts of the limit order book.
-
-    #     Notes
-    #     -----
-    #     This can potentially consume memory very rapidly; it should probably be
-    #     replaced with a disk-based mechanism.
-        
-    #     """
-    #     self._book_data_hist[BID][date_time] = \
-    #       copy.deepcopy(self._book_data[BID])
-    #     self._book_data_hist[ASK][date_time] = \
-    #       copy.deepcopy(self._book_data[ASK])
 
     def create_level(self, indicator, price):
         """
@@ -305,6 +290,7 @@ class LimitOrderBook(object):
         book = self._book_data[indicator]
         od = book[price]
         od.pop(order_number)
+        self._book_orders_to_price.pop(order_number)
         self.logger.info('deleted order: %s, %s, %s' % \
                          (order_number, indicator, price))
         if not od:
@@ -734,7 +720,11 @@ class LimitOrderBook(object):
                                   new_order['buy_sell_indicator'],
                                   new_order['limit_price']))
                 od[new_order['order_number']] = new_order
-               
+
+                # Map the order's ID number to its price level queue to facilitate
+                # access at a later point:
+                self._book_orders_to_price[new_order['order_number']] = od
+                
             # Try to match marketable orders with orders that are already in the
             # book:
             else:
@@ -899,69 +889,56 @@ class LimitOrderBook(object):
             raise ValueError('cannot modify market order')
 
         # A modify order contains the number of the existing order to modify and
-        # a new limit price or quantity. We therefore need to search through the
-        # relevant limit order book queue for the specified order number:
-        # XXX To improve performance, it might be desirable to maintain a dict
-        # that maps order numbers directly to the orders in the limit order book
-        # queues XXX
-        success = False
+        # a new limit price or quantity. We use the self._book_orders_to_price
+        # dict to look up the existing order:
         book = self._book_data[new_order['buy_sell_indicator']]
-        for price in book.keys():
-            od = book[price]
-            try:
-                old_order = od[new_order['order_number']]
-            except:
-                pass
-            else:
-            
-                # If the modify changes the price of an order, remove it and
-                # then add the modified order to the appropriate price level queue:
-                if new_order['limit_price'] != old_order['limit_price']:
-                    self.logger.info('modified order %i price from %f to %f: ' % \
-                                     (new_order['order_number'],
-                                      old_order['limit_price'],
-                                      new_order['limit_price']))
-                    self.delete_order(old_order['buy_sell_indicator'],
-                                      old_order['limit_price'],
-                                      new_order['order_number'])
-                    self.add(new_order, 'N')
-                    success = True
-                    break
-                
-                # If the modify reduces the original or disclosed volume of an
-                # order, update it without altering where it is in the queue:
-                elif new_order['volume_original'] < old_order['volume_original'] or \
-                    new_order['volume_disclosed'] < old_order['volume_disclosed']:
-                    self.logger.info('modified order %i (original, disclosed) volume '                    
-                                     'from (%i, %i) to (%i, %i)' % \
-                                     (new_order['order_number'],
-                                      old_order['volume_original'], old_order['volume_disclosed'],
-                                      new_order['volume_original'], new_order['volume_disclosed']))
-                    od[new_order['order_number']] = new_order
-                    success = True
-                    break
-                
-                # If the modify increases the original or disclosed volume of an
-                # order, add a order containing the difference in volume between
-                # the original and new orders:
-                elif new_order['volume_original'] > old_order['volume_original'] or \
-                    new_order['volume_disclosed'] > old_order['volume_disclosed']:
-                    self.logger.info('modified order %i (original, disclosed) volume '
-                                     'from (%i, %i) to (%i, %i)' % \
-                                     (new_order['order_number'],
-                                      old_order['volume_original'], old_order['volume_disclosed'],
-                                      new_order['volume_original'], new_order['volume_disclosed']))
-                    new_order_modified = new_order.copy()
-                    new_order_modified['volume_original'] -= old_order['volume_original']
-                    new_order_modified['volume_disclosed'] -= old_order['volume_disclosed']
-                    self.add(new_order_modified, 'N')
-                    success = True
-                    break
-                else:
-                    self.logger.info('undefined modify scenario')
-
-        if not success:
+        try:
+            od = self._book_orders_to_price[new_order['order_number']]
+        except:
             self.logger.info('order number %s not found' % new_order['order_number'])
+        else:
+            old_order = od[new_order['order_number']]
+            
+            # If the modify changes the price of an order, remove it and
+            # then add the modified order to the appropriate price level queue:
+            if new_order['limit_price'] != old_order['limit_price']:
+                self.logger.info('modified order %i price from %f to %f: ' % \
+                                 (new_order['order_number'],
+                                  old_order['limit_price'],
+                                  new_order['limit_price']))
+                self.delete_order(old_order['buy_sell_indicator'],
+                                  old_order['limit_price'],
+                                  new_order['order_number'])
+                self.add(new_order, 'N')
+
+            # If the modify reduces the original or disclosed volume of an
+            # order, update it without altering where it is in the price level queue:
+            elif new_order['volume_original'] < old_order['volume_original'] or \
+                new_order['volume_disclosed'] < old_order['volume_disclosed']:
+                self.logger.info('modified order %i (original, disclosed) volume '                    
+                                 'from (%i, %i) to (%i, %i)' % \
+                                 (new_order['order_number'],
+                                  old_order['volume_original'], old_order['volume_disclosed'],
+                                  new_order['volume_original'], new_order['volume_disclosed']))
+                od[new_order['order_number']] = new_order
+
+            # If the modify increases the original or disclosed volume of an
+            # order, add a order containing the difference in volume between
+            # the original and new orders:
+            elif new_order['volume_original'] > old_order['volume_original'] or \
+                new_order['volume_disclosed'] > old_order['volume_disclosed']:
+                self.logger.info('modified order %i (original, disclosed) volume '
+                                 'from (%i, %i) to (%i, %i)' % \
+                                 (new_order['order_number'],
+                                  old_order['volume_original'], old_order['volume_disclosed'],
+                                  new_order['volume_original'], new_order['volume_disclosed']))
+                new_order_modified = new_order.copy()
+                new_order_modified['volume_original'] -= old_order['volume_original']
+                new_order_modified['volume_disclosed'] -= old_order['volume_disclosed']
+                self.add(new_order_modified, 'N')
+            else:
+                self.logger.info('undefined modify scenario')
+                            
         self.record_event(**event)
         
     def cancel(self, order):
