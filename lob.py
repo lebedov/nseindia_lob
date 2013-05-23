@@ -21,6 +21,7 @@ import copy
 import csv
 import datetime
 import logging
+import numpy as np
 import odict
 import pandas
 import sys
@@ -103,10 +104,11 @@ class LimitOrderBook(object):
         # Accumulated data for daily stats is stored in this dictionary:        
         self._daily_stats = {}
         self._init_daily_stats = {
-            'total_trade_volume': 0.0,
-            'num_trades': 0,                                  
-            'mean_trade_price': 0.0,
             'num_orders': 0,
+            'num_trades': 0,
+            'trade_volume_total': 0.0,
+            'trade_price_mean': 0.0,
+            'trade_price_std': 0.0,
             'mean_order_interarrival_time': 0.0
             }
         self._curr_daily_stats = copy.copy(self._init_daily_stats)
@@ -478,19 +480,22 @@ class LimitOrderBook(object):
             self._curr_daily_stats['num_trades'] += 1
 
             # Total trade volume:
-            self._curr_daily_stats['total_trade_volume'] += \
+            self._curr_daily_stats['trade_volume_total'] += \
                 kwargs['trade']['trade_quantity']
 
             # Average trade price:
             if self._curr_daily_stats['num_trades'] == 1:                
-                self._curr_daily_stats['mean_trade_price'] = \
+                self._curr_daily_stats['trade_price_mean'] = \
                     kwargs['trade']['trade_price']
             else:
                 N = float(self._curr_daily_stats['num_trades'])
                 N_prev = N-1
-                self._curr_daily_stats['mean_trade_price'] = \
-                    self._curr_daily_stats['mean_trade_price']*(N_prev/N)+\
-                    kwargs['trade']['trade_price']/N
+                self._curr_daily_stats['trade_price_mean'] = \
+                    (self._curr_daily_stats['trade_price_mean']*N_prev+\
+                    kwargs['trade']['trade_price'])/N
+                self._curr_daily_stats['trade_price_std'] = \
+                  np.sqrt((self._curr_daily_stats['trade_price_std']**2*N_prev+\
+                          (kwargs['trade']['trade_price']-self._curr_daily_stats['trade_price_mean'])**2)/N)
 
         if self.show_output:
             print '----------------------------------------'
@@ -1013,6 +1018,10 @@ class LimitOrderBook(object):
             print ''
 
     def event_to_row(self, event):
+        """
+        Convert a dictionary containing event data into a row for output to CSV.
+        """
+        
         row = [event['time'],
                event['date'],
                event['price'],
@@ -1049,7 +1058,16 @@ class LimitOrderBook(object):
             w.writerow(row)
         if file_name is not None:
             f.close()
-            
+
+    def print_stats(self):
+        print '----------------------------------------'
+        print 'Number of orders:             ', self._curr_daily_stats['num_orders']
+        print 'Number of trades:             ', self._curr_daily_stats['num_trades']
+        print 'Total trade volume:           ', self._curr_daily_stats['trade_volume_total']
+        print 'Mean trade price:             ', self._curr_daily_stats['trade_price_mean']
+        print 'Trade price STD:              ', self._curr_daily_stats['trade_price_std']
+        print 'Mean order interarrival time: ', self._curr_daily_stats['mean_order_interarrival_time']
+        
 if __name__ == '__main__':
     format = '%(asctime)s %(name)s %(levelname)s [%(funcName)s] %(message)s'
     logging.basicConfig(level=logging.DEBUG, format=format)
@@ -1067,9 +1085,15 @@ if __name__ == '__main__':
     tp = pandas.read_csv(file_name,
                          names=col_names,
                          iterator=True)
-    for i in xrange(2):
-        data = tp.get_chunk(200)
+    # for i in xrange(2):
+    #     data = tp.get_chunk(200)
+    #     lob.process(data)
+    while True:
+        data = tp.get_chunk(100)
+        if data.irow(0)['trans_time'] > '10:15:00.000000':
+            break
         lob.process(data)
+
     # while True:
     #     try:
     #         data = tp.get_chunk(200)
@@ -1078,3 +1102,4 @@ if __name__ == '__main__':
     #     else:
     #         lob.process(data)
             
+    lob.print_stats()
