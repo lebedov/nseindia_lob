@@ -268,17 +268,12 @@ class LimitOrderBook(object):
         self._book_data[indicator].pop(price)
         self.logger.info('deleted price level: %s, %f' % (indicator, price))
 
-    def delete_order(self, indicator, price, order_number):
+    def delete_order(self, order_number):
         """
         Delete an order from a price level queue.
 
         Parameters
         ----------
-        indicator : str
-            Indicate whether to create a new buy ('B') or sell ('S') price
-            level.
-        price : float
-            Price associated with level.
         order_number : str
             Number of order to delete.
 
@@ -289,14 +284,20 @@ class LimitOrderBook(object):
         
         """
 
-        book = self._book_data[indicator]
-        od = book[price]
-        od.pop(order_number)
-        self._book_orders_to_price.pop(order_number)
-        self.logger.info('deleted order: %s, %s, %s' % \
-                         (order_number, indicator, price))
-        if not od:
-            self.delete_level(indicator, price)
+        try:
+            od = self._book_orders_to_price.pop(order_number)
+        except:
+            self.logger.info('order not found: %s' % order_number)
+        else:
+            order = od.pop(order_number)
+            indicator = order['buy_sell_indicator']
+            price = order['limit_price']
+            self.logger.info('deleted order: %s, %s, %s' % (order_number,
+                                                            indicator, price))      
+            
+            # If the price level queue contains no other orders, remove it:
+            if not od:
+                self.delete_level(indicator, price)
             
     def best_bid_price(self):
         """
@@ -641,8 +642,7 @@ class LimitOrderBook(object):
                                      sell_order_number=sell_order['order_number'])
                         event['trade'] = trade
                         self.record_event(**event)
-                        self.delete_order(curr_order['buy_sell_indicator'],
-                                          best_price, order_number)
+                        self.delete_order(order_number)                                          
                         volume_original = 0.0                 
                         break
 
@@ -686,8 +686,7 @@ class LimitOrderBook(object):
                         event['trade'] = trade
                         self.record_event(**event)
                         volume_original -= curr_order['volume_original']
-                        self.delete_order(curr_order['buy_sell_indicator'],
-                                          best_price, order_number)
+                        self.delete_order(order_number)
                     else:
 
                         # This should never be reached:
@@ -804,8 +803,7 @@ class LimitOrderBook(object):
                                          sell_order_number=sell_order['order_number'])
                             event['trade'] = trade
                             self.record_event(**event)
-                            self.delete_order(curr_order['buy_sell_indicator'],
-                                              best_price, order_number)
+                            self.delete_order(order_number)                                              
                             volume_original = 0.0
                             break
                         
@@ -849,8 +847,7 @@ class LimitOrderBook(object):
                             event['trade'] = trade
                             self.record_event(**event)                            
                             volume_original -= curr_order['volume_original']
-                            self.delete_order(curr_order['buy_sell_indicator'],
-                                              best_price, order_number)
+                            self.delete_order(order_number)                                              
                         else:
 
                             # This should never be reached:
@@ -911,9 +908,7 @@ class LimitOrderBook(object):
                                  (new_order['order_number'],
                                   old_order['limit_price'],
                                   new_order['limit_price']))
-                self.delete_order(old_order['buy_sell_indicator'],
-                                  old_order['limit_price'],
-                                  new_order['order_number'])
+                self.delete_order(new_order['order_number'])                                   
                 self.add(new_order, 'N')
 
             # If the modify reduces the original or disclosed volume of an
@@ -985,23 +980,7 @@ class LimitOrderBook(object):
         if order['mkt_flag'] == 'Y':
             raise ValueError('cannot cancel market order')
 
-        indicator = order['buy_sell_indicator']
-        price = order['limit_price']
-        order_number = order['order_number']
-        od = self.price_level(indicator, price)
-        if od is not None:
-            self.logger.info('matching price level found: %s, %f' % \
-                             (indicator, price))
-            try:
-                old_order = od[order_number]            
-            except:
-                self.logger.info('order number %i not found' % order_number)
-            else:
-                self.delete_order(indicator, price, order_number)          
-                self.logger.info('canceled order: %s, %s, %s' % \
-                                 (order_number, indicator, price))
-        else:
-            self.logger.info('no matching price level found')
+        self.delete_order(order['order_number'])
 
         self.record_event(**event)
                                                     
