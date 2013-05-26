@@ -25,6 +25,8 @@ import numpy as np
 import odict
 import pandas
 import sys
+import time
+
 col_names = \
   ['record_indicator',
    'segment',
@@ -83,6 +85,16 @@ class LimitOrderBook(object):
         self._book_data[BID] = {}
         self._book_data[ASK] = {}
 
+        # This dictionary maps price levels to dictionaries that contain several
+        # running stats for each level
+        self._price_level_stats = {}
+        self._price_level_stats[BID] = {}
+        self._price_level_stats[ASK] = {}
+        self._init_price_level_stats = {
+            'volume_original_total': 0,
+            'volume_disclosed_total': 0
+            }
+        
         # This dictionary maps the IDs of orders that are in the book to their
         # price level:
         self._book_orders_to_price = {}
@@ -249,6 +261,8 @@ class LimitOrderBook(object):
 
         od = odict.odict()
         self._book_data[indicator][price] = od
+        self._price_level_stats[indicator][price] = \
+            copy.copy(self._init_price_level_stats)
         self.logger.info('created new price level: %s, %f' % (indicator, price))
         return od
     
@@ -266,16 +280,51 @@ class LimitOrderBook(object):
         """
         
         self._book_data[indicator].pop(price)
+        self._price_level_stats[indicator].pop(price)
         self.logger.info('deleted price level: %s, %f' % (indicator, price))
 
-    def delete_order(self, order_number):
+    def add_order(self, order):
         """
-        Delete an order from a price level queue.
+        Add an order to the book.
 
         Parameters
         ----------
-        order_number : str
-            Number of order to delete.
+        order : dict
+            Order data.
+            
+        """
+
+        order_number = order['order_number']
+        indicator = order['buy_sell_indicator']
+        price = order['limit_price']
+        od = self.price_level(indicator, price)
+
+        # Create a new price level queue if none exists for the order's
+        # limit price:
+        if od is None:
+            self.logger.info('no matching price level found')
+            od = self.create_level(indicator, price)
+
+        od[order_number] = order
+        self._book_orders_to_price[order_number] = od
+        
+        # Update price level stats:
+        self._price_level_stats[indicator][price]['volume_original_total'] += \
+            order['volume_original']
+        self._price_level_stats[indicator][price]['volume_disclosed_total'] += \
+            order['volume_disclosed']
+            
+        self.logger.info('added order: %s, %s, %s' % \
+                            (order_number, indicator, price))    
+            
+    def delete_order(self, order):
+        """
+        Delete an order from the book.
+
+        Parameters
+        ----------
+        order : dict
+            Order data.
 
         Notes
         -----
@@ -284,6 +333,7 @@ class LimitOrderBook(object):
         
         """
 
+        order_number = order['order_number']
         try:
             od = self._book_orders_to_price.pop(order_number)
         except:
@@ -292,8 +342,15 @@ class LimitOrderBook(object):
             order = od.pop(order_number)
             indicator = order['buy_sell_indicator']
             price = order['limit_price']
-            self.logger.info('deleted order: %s, %s, %s' % (order_number,
-                                                            indicator, price))      
+
+            # Update price level stats:
+            self._price_level_stats[indicator][price]['volume_original_total'] -= \
+                order['volume_original']
+            self._price_level_stats[indicator][price]['volume_disclosed_total'] -= \
+                order['volume_disclosed']
+
+            self.logger.info('deleted order: %s, %s, %s' % \
+                             (order_number, indicator, price))    
             
             # If the price level queue contains no other orders, remove it:
             if not od:
@@ -560,12 +617,12 @@ class LimitOrderBook(object):
                best_ask_volume_original=best_ask_volume_original,    
                trade={})
         
-        indicator = new_order['buy_sell_indicator']
+        new_indicator = new_order['buy_sell_indicator']
         volume_original = new_order['volume_original']
         volume_disclosed = new_order['volume_disclosed']
 
         self.logger.info('attempting add of order: %s, %s, %s, %f, %d, %d' % \
-                         (new_order['order_number'], indicator, new_order['mkt_flag'],
+                         (new_order['order_number'], new_indicator, new_order['mkt_flag'],
                          new_order['limit_price'], volume_original,
                          volume_disclosed))
         
@@ -573,7 +630,7 @@ class LimitOrderBook(object):
         # corresponding limit order in the book at the best ask/bid price:
         if new_order['mkt_flag'] == 'Y':
             while volume_original > 0:
-                if indicator == BUY:
+                if new_indicator == BUY:
                     buy_order = new_order
                     best_price = self.best_ask_price()
 
@@ -582,7 +639,7 @@ class LimitOrderBook(object):
                     if best_price is None:
                         self.logger.info('no sell limit orders in book yet')
                     od = self.price_level(ASK, best_price) 
-                elif indicator == SELL:
+                elif new_indicator == SELL:
                     sell_order = new_order
                     best_price = self.best_bid_price()
 
@@ -597,10 +654,10 @@ class LimitOrderBook(object):
                 # If there is still residual volume but the best price is no
                 # longer compatible with that of the arriving order, stop
                 # trying to match orders:
-                if indicator == BUY and best_price > new_order['limit_price']:
+                if new_indicator == BUY and best_price > new_order['limit_price']:
                     self.logger.info('best ask exceeds specified buy price')
                     break
-                if indicator == SELL and best_price < new_order['limit_price']:
+                if new_indicator == SELL and best_price < new_order['limit_price']:
                     self.logger.info('best bid is below specified sell price')
                     break
 
@@ -642,7 +699,7 @@ class LimitOrderBook(object):
                                      sell_order_number=sell_order['order_number'])
                         event['trade'] = trade
                         self.record_event(**event)
-                        self.delete_order(order_number)                                          
+                        self.delete_order(curr_order) 
                         volume_original = 0.0                 
                         break
 
@@ -664,6 +721,8 @@ class LimitOrderBook(object):
                         if new_order['io_flag'] == 'N':
                             self.logger.info('Non-IOC order - residual volume preserved')
                             curr_order['volume_original'] -= volume_original
+                            self._price_level_stats[curr_order['buy_sell_indicator']][curr_order['limit_price']]['volume_original_total'] \
+                                -= volume_original
                         else:
                             self.logger.info('IOC order - residual volume discarded')
                         volume_original = 0.0
@@ -686,7 +745,7 @@ class LimitOrderBook(object):
                         event['trade'] = trade
                         self.record_event(**event)
                         volume_original -= curr_order['volume_original']
-                        self.delete_order(order_number)
+                        self.delete_order(curr_order)
                     else:
 
                         # This should never be reached:
@@ -697,10 +756,10 @@ class LimitOrderBook(object):
             # Check whether the limit order is marketable:
             price = new_order['limit_price']
             marketable = True
-            if indicator == BUY and self.best_ask_price() is not None and price >= self.best_ask_price():
+            if new_indicator == BUY and self.best_ask_price() is not None and price >= self.best_ask_price():
                 self.logger.info('buy order is marketable')
                 best_price = self.best_ask_price();
-            elif indicator == SELL and self.best_bid_price() is not None and price <= self.best_bid_price():
+            elif new_indicator == SELL and self.best_bid_price() is not None and price <= self.best_bid_price():
                 self.logger.info('sell order is marketable')
                 best_price = self.best_bid_price();
             else:
@@ -711,23 +770,7 @@ class LimitOrderBook(object):
             if not marketable:
                 self.logger.info('order is not marketable')
                 self.record_event(**event)
-                od = self.price_level(indicator, price)
-
-                # Create a new price level queue if none exists for the order's
-                # limit price:
-                if od is None:
-                    self.logger.info('no matching price level found')
-                    od = self.create_level(indicator, price)
-
-                self.logger.info('added order: %s, %s, %s' % \
-                                 (new_order['order_number'],
-                                  new_order['buy_sell_indicator'],
-                                  new_order['limit_price']))
-                od[new_order['order_number']] = new_order
-
-                # Map the order's ID number to its price level queue to facilitate
-                # access at a later point:
-                self._book_orders_to_price[new_order['order_number']] = od
+                self.add_order(new_order)
                 
             # Try to match marketable orders with orders that are already in the
             # book:
@@ -737,11 +780,11 @@ class LimitOrderBook(object):
                 # satisfied at the best price, recompute the best price and
                 # try to satisfy the remainder:
                 while volume_original > 0.0:
-                    if indicator == BUY:
+                    if new_indicator == BUY:
                         buy_order = new_order                    
                         best_price = self.best_ask_price()
                         od = self.price_level(ASK, best_price) 
-                    elif indicator == SELL:
+                    elif new_indicator == SELL:
                         sell_order = new_order
                         best_price = self.best_bid_price()                
                         od = self.price_level(BID, best_price)
@@ -752,13 +795,13 @@ class LimitOrderBook(object):
                     # longer compatible with that of the arriving order, stop
                     # trying to match orders and save the residue as a new limit
                     # order:
-                    if indicator == BUY and best_price > new_order['limit_price']:
+                    if new_indicator == BUY and best_price > new_order['limit_price']:
                         self.logger.info('best ask exceeds specified buy price')
                         if new_order['io_flag'] == 'N':
                             new_order['volume_original'] = volume_original
                             self.add(new_order, 'N')
                         break
-                    if indicator == SELL and best_price < new_order['limit_price']:
+                    if new_indicator == SELL and best_price < new_order['limit_price']:
                         self.logger.info('best bid is below specified sell price')
                         if new_order['io_flag'] == 'N':
                             new_order['volume_original'] = volume_original
@@ -781,9 +824,9 @@ class LimitOrderBook(object):
                     # oldest to newest:
                     for order_number in order_number_list: 
                         curr_order = od[order_number]
-                        if indicator == BUY:
+                        if new_indicator == BUY:
                             sell_order = curr_order
-                        elif indicator == SELL:
+                        elif new_indicator == SELL:
                             buy_order = curr_order
                         else:
                             RuntimeError('invalid buy/sell indicator')
@@ -803,7 +846,7 @@ class LimitOrderBook(object):
                                          sell_order_number=sell_order['order_number'])
                             event['trade'] = trade
                             self.record_event(**event)
-                            self.delete_order(order_number)                                              
+                            self.delete_order(curr_order)
                             volume_original = 0.0
                             break
                         
@@ -825,6 +868,9 @@ class LimitOrderBook(object):
                             if new_order['io_flag'] == 'N':
                                 self.logger.info('Non-IOC order - residual volume preserved')  
                                 curr_order['volume_original'] -= volume_original
+                                self._price_level_stats[curr_order['buy_sell_indicator']][curr_order['limit_price']]['volume_original_total'] \
+                                  -= volume_original
+    
                             else:
                                 self.logger.info('IOC order - residual volume discarded')
                             volume_original = 0.0
@@ -847,7 +893,7 @@ class LimitOrderBook(object):
                             event['trade'] = trade
                             self.record_event(**event)                            
                             volume_original -= curr_order['volume_original']
-                            self.delete_order(order_number)                                              
+                            self.delete_order(curr_order) 
                         else:
 
                             # This should never be reached:
@@ -908,7 +954,7 @@ class LimitOrderBook(object):
                                  (new_order['order_number'],
                                   old_order['limit_price'],
                                   new_order['limit_price']))
-                self.delete_order(new_order['order_number'])                                   
+                self.delete_order(old_order)                                   
                 self.add(new_order, 'N')
 
             # If the modify reduces the original or disclosed volume of an
@@ -922,6 +968,12 @@ class LimitOrderBook(object):
                                   new_order['volume_original'], new_order['volume_disclosed']))
                 od[new_order['order_number']] = new_order
 
+                # Update price level stats:
+                self._price_level_stats[new_order['buy_sell_indicator']][new_order['limit_price']]['volume_original_total'] \
+                    += -old_order['volume_original']+new_order['volume_original']
+                self._price_level_stats[new_order['buy_sell_indicator']][new_order['limit_price']]['volume_disclosed_total'] \
+                    += -old_order['volume_disclosed']+new_order['volume_disclosed']                
+                
             # If the modify increases the original or disclosed volume of an
             # order, add a order containing the difference in volume between
             # the original and new orders:
@@ -936,6 +988,13 @@ class LimitOrderBook(object):
                 new_order_modified['volume_original'] -= old_order['volume_original']
                 new_order_modified['volume_disclosed'] -= old_order['volume_disclosed']
                 self.add(new_order_modified, 'N')
+
+                # Update price level stats:
+                self._price_level_stats[new_order['buy_sell_indicator']][new_order['limit_price']]['volume_original_total'] \
+                    += -old_order['volume_original']+new_order['volume_original']
+                self._price_level_stats[new_order['buy_sell_indicator']][new_order['limit_price']]['volume_disclosed_total'] \
+                    += -old_order['volume_disclosed']+new_order['volume_disclosed']                
+
             else:
                 self.logger.info('undefined modify scenario')
                             
@@ -980,8 +1039,7 @@ class LimitOrderBook(object):
         if order['mkt_flag'] == 'Y':
             raise ValueError('cannot cancel market order')
 
-        self.delete_order(order['order_number'])
-
+        self.delete_order(order)
         self.record_event(**event)
                                                     
     def print_book(self, book):
@@ -1048,6 +1106,8 @@ class LimitOrderBook(object):
         print 'Mean order interarrival time: ', self._curr_daily_stats['mean_order_interarrival_time']
         
 if __name__ == '__main__':
+    start = time.time()
+    
     format = '%(asctime)s %(name)s %(levelname)s [%(funcName)s] %(message)s'
     logging.basicConfig(level=logging.DEBUG, format=format)
 
@@ -1064,14 +1124,14 @@ if __name__ == '__main__':
     tp = pandas.read_csv(file_name,
                          names=col_names,
                          iterator=True)
-    # for i in xrange(2):
-    #     data = tp.get_chunk(200)
-    #     lob.process(data)
-    while True:
-        data = tp.get_chunk(100)
-        if data.irow(0)['trans_time'] > '10:15:00.000000':
-            break
+    for i in xrange(50):
+        data = tp.get_chunk(200)
         lob.process(data)
+    # while True:
+    #     data = tp.get_chunk(100)
+    #     if data.irow(0)['trans_time'] > '10:15:00.000000':
+    #         break
+    #     lob.process(data)
 
     # while True:
     #     try:
@@ -1082,3 +1142,4 @@ if __name__ == '__main__':
     #         lob.process(data)
             
     lob.print_stats()
+    print 'Processing time:              ', (time.time()-start)
