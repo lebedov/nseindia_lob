@@ -17,6 +17,7 @@ Notes
   http://iopscience.iop.org/0295-5075/75/3/510/fulltext/
 """
 
+import bintrees
 import copy
 import csv
 import datetime
@@ -84,7 +85,7 @@ class LimitOrderBook(object):
         self._book_data = {}
         self._book_data[BID] = {}
         self._book_data[ASK] = {}
-
+        
         # This dictionary maps price levels to dictionaries that contain several
         # running stats for each level
         self._price_level_stats = {}
@@ -155,6 +156,8 @@ class LimitOrderBook(object):
         self.logger.info('clearing outstanding limit orders')
         for d in self._book_data.keys():
             self._book_data[d].clear()
+            self._price_level_stats[d].clear()
+        self._book_orders_to_price.clear()
         
     def process(self, df, show_output=True, log_events=True):
         """
@@ -386,23 +389,23 @@ class LimitOrderBook(object):
 
         Returns
         -------
-        volume_original : int
-            Original volume.
-        volume_disclosed : int
-            Disclosed volume.
+        volume_original_total : int
+            Total original volume.
+        volume_disclosed_total : int
+            Total disclosed volume.
        
         """
         
         best_bid_price = self.best_bid_price()
         if best_bid_price is not None:
             od = self.price_level(BID, best_bid_price)
-            volume_original = \
-              sum([order['volume_original'] for order in od.itervalues()])
-            volume_disclosed = \
-              sum([order['volume_disclosed'] for order in od.itervalues()])
+            volume_original_total = \
+                self._price_level_stats[BID][best_bid_price]['volume_original_total']
+            volume_disclosed_total = \
+                self._price_level_stats[BID][best_bid_price]['volume_disclosed_total']
         else:
-            volume_original = volume_disclosed = 0
-        return volume_original, volume_disclosed
+            volume_original_total = volume_disclosed_total = 0
+        return volume_original_total, volume_disclosed_total
     
     def best_ask_price(self):
         """
@@ -434,23 +437,23 @@ class LimitOrderBook(object):
 
         Returns
         -------
-        volume_original : int
-            Original volume.
-        volume_disclosed : int
-            Disclosed volume.
+        volume_original_total : int
+            Total original volume.
+        volume_disclosed_total : int
+            Total disclosed volume.
        
         """
         
         best_ask_price = self.best_ask_price()
         if best_ask_price is not None:
             od = self.price_level(ASK, best_ask_price)
-            volume_original = \
-              sum([order['volume_original'] for order in od.itervalues()])
-            volume_disclosed = \
-              sum([order['volume_disclosed'] for order in od.itervalues()])
+            volume_original_total = \
+                self._price_level_stats[ASK][best_ask_price]['volume_original_total']
+            volume_disclosed_total = \
+                self._price_level_stats[ASK][best_ask_price]['volume_disclosed_total']
         else:
-            volume_original = volume_disclosed = 0
-        return volume_original, volume_disclosed
+            volume_original_total = volume_disclosed_total = 0
+        return volume_original_total, volume_disclosed_total
         
     def price_level(self, indicator, price):
         """
