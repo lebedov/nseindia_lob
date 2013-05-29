@@ -394,12 +394,14 @@ class LimitOrderBook(object):
         else:
             return best_price
         
-    def best_bid_quantity(self):
+    def best_bid_data(self):
         """
-        Return the total original and disclosed bid quantity.
+        Return data associated with the best bid
 
         Returns
         -------
+        best_bid_price : float
+            Bid price.
         volume_original_total : int
             Total original volume.
         volume_disclosed_total : int
@@ -415,7 +417,7 @@ class LimitOrderBook(object):
                 self._price_level_stats[BID][best_bid_price]['volume_disclosed_total']
         else:
             volume_original_total = volume_disclosed_total = 0
-        return volume_original_total, volume_disclosed_total
+        return best_bid_price, volume_original_total, volume_disclosed_total
     
     def best_ask_price(self):
         """
@@ -439,12 +441,14 @@ class LimitOrderBook(object):
         else:
             return best_price
 
-    def best_ask_quantity(self):
+    def best_ask_data(self):
         """
-        Return the total original and disclosed ask quantity.
+        Return data associated with the best ask.
 
         Returns
         -------
+        ask_price : float
+            Ask price.
         volume_original_total : int
             Total original volume.
         volume_disclosed_total : int
@@ -460,7 +464,7 @@ class LimitOrderBook(object):
                 self._price_level_stats[ASK][best_ask_price]['volume_disclosed_total']
         else:
             volume_original_total = volume_disclosed_total = 0
-        return volume_original_total, volume_disclosed_total
+        return best_ask_price, volume_original_total, volume_disclosed_total
         
     def price_level(self, indicator, price):
         """
@@ -604,10 +608,10 @@ class LimitOrderBook(object):
         
         """
 
-        best_bid_volume_original, best_bid_volume_disclosed = \
-          self.best_bid_quantity()
-        best_ask_volume_original, best_ask_volume_disclosed = \
-          self.best_ask_quantity()
+        best_bid_price, best_bid_volume_original, best_bid_volume_disclosed = \
+          self.best_bid_data()
+        best_ask_price, best_ask_volume_original, best_ask_volume_disclosed = \
+          self.best_ask_data()
         event = \
           dict(time=new_order['trans_time'],
                date=new_order['trans_date'],
@@ -620,9 +624,9 @@ class LimitOrderBook(object):
                io_flag=new_order['io_flag'],
                volume_original=new_order['volume_original'],
                volume_disclosed=new_order['volume_disclosed'],
-               best_bid=self.best_bid_price(),
+               best_bid_price=best_bid_price,
                best_bid_volume_original=best_bid_volume_original,
-               best_ask=self.best_ask_price(),
+               best_ask_price=best_ask_price,
                best_ask_volume_original=best_ask_volume_original,    
                trade={})
         
@@ -915,10 +919,10 @@ class LimitOrderBook(object):
         Modify the order with matching order number in the LOB.
         """
 
-        best_bid_volume_original, best_bid_volume_disclosed = \
-          self.best_bid_quantity()
-        best_ask_volume_original, best_ask_volume_disclosed = \
-          self.best_ask_quantity()         
+        best_bid_price, best_bid_volume_original, best_bid_volume_disclosed = \
+          self.best_bid_data()
+        best_ask_price, best_ask_volume_original, best_ask_volume_disclosed = \
+          self.best_ask_data()
         event = \
           dict(time=new_order['trans_time'],
                date=new_order['trans_date'],
@@ -931,9 +935,9 @@ class LimitOrderBook(object):
                io_flag=new_order['io_flag'],
                volume_original=new_order['volume_original'],
                volume_disclosed=new_order['volume_disclosed'],
-               best_bid=self.best_bid_price(),
+               best_bid_price=best_bid_price,
                best_bid_volume_original=best_bid_volume_original,
-               best_ask=self.best_ask_price(),
+               best_ask_price=best_ask_price,
                best_ask_volume_original=best_ask_volume_original,    
                trade={})
 
@@ -1020,10 +1024,10 @@ class LimitOrderBook(object):
 
         """
                 
-        best_bid_volume_original, best_bid_volume_disclosed = \
-          self.best_bid_quantity()
-        best_ask_volume_original, best_ask_volume_disclosed = \
-          self.best_ask_quantity()         
+        best_bid_price, best_bid_volume_original, best_bid_volume_disclosed = \
+          self.best_bid_data()
+        best_ask_price, best_ask_volume_original, best_ask_volume_disclosed = \
+          self.best_ask_data()
         event = \
           dict(time=order['trans_time'],
                date=order['trans_date'],
@@ -1036,9 +1040,9 @@ class LimitOrderBook(object):
                io_flag=order['io_flag'],
                volume_original=order['volume_original'],
                volume_disclosed=order['volume_disclosed'],
-               best_bid=self.best_bid_price(),
+               best_bid_price=best_bid_price,
                best_bid_volume_original=best_bid_volume_original,
-               best_ask=self.best_ask_price(),
+               best_ask_price=best_ask_price,
                best_ask_volume_original=best_ask_volume_original,    
                trade={})
 
@@ -1080,9 +1084,9 @@ class LimitOrderBook(object):
                event['mkt_flag'],
                event['volume_original'],
                event['volume_disclosed'],
-               event['best_bid'],
+               event['best_bid_price'],
                event['best_bid_volume_original'],
-               event['best_ask'],
+               event['best_ask_price'],
                event['best_ask_volume_original']]
         trade = event['trade']
         if trade:
