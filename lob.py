@@ -83,8 +83,18 @@ class LimitOrderBook(object):
         # number is equivalent to pushing it into the queue, and the ordered
         # dict permits one to "pop" its first entry:
         self._book_data = {}
-        self._book_data[BID] = bintrees.BinaryTree()
-        self._book_data[ASK] = bintrees.BinaryTree()
+        self._book_data[BID] = {}
+        self._book_data[ASK] = {}
+
+        # Use Cython-based bintrees classes to keep track of the best bid and
+        # ask without having to compute the maximum/minimum prices of the buy
+        # and sell portions of the book:
+        # XXX For some reason, using the Cython-based bintrees classes to store
+        # the book data results in a segfault. Saving only the prices in one of
+        # these classes appears to prevent this problem from occurring:
+        self._book_prices = {}
+        self._book_prices[BID] = bintrees.FastBinaryTree()
+        self._book_prices[ASK] = bintrees.FastBinaryTree()
         
         # This dictionary maps price levels to dictionaries that contain several
         # running stats for each level
@@ -156,6 +166,7 @@ class LimitOrderBook(object):
         self.logger.info('clearing outstanding limit orders')
         for d in self._book_data.keys():
             self._book_data[d].clear()
+            self._book_prices[d].clear()
             self._price_level_stats[d].clear()
         self._book_orders_to_price.clear()
         
@@ -264,6 +275,7 @@ class LimitOrderBook(object):
 
         od = odict.odict()
         self._book_data[indicator][price] = od
+        self._book_prices[indicator][price] = True        
         self._price_level_stats[indicator][price] = \
             copy.copy(self._init_price_level_stats)
         self.logger.info('created new price level: %s, %f' % (indicator, price))
@@ -283,6 +295,7 @@ class LimitOrderBook(object):
         """
         
         self._book_data[indicator].pop(price)
+        self._book_prices[indicator].pop(price)
         self._price_level_stats[indicator].pop(price)
         self.logger.info('deleted price level: %s, %f' % (indicator, price))
 
@@ -375,21 +388,12 @@ class LimitOrderBook(object):
         """
 
         try:
-            best_price = self._book_data[BID].max_key()
+            best_price = self._book_prices[BID].max_key()
         except:
             return None
         else:
             return best_price
         
-        # prices = self._book_data[BID].keys()
-        # if prices == []:
-        #     return None
-        # else:
-        #     best_price = max(prices)
-        #     if not self._book_data[BID][best_price]:
-        #         raise RuntimeError('empty price level detected')
-        #     return best_price
-
     def best_bid_quantity(self):
         """
         Return the total original and disclosed bid quantity.
@@ -405,7 +409,6 @@ class LimitOrderBook(object):
         
         best_bid_price = self.best_bid_price()
         if best_bid_price is not None:
-            od = self.price_level(BID, best_bid_price)
             volume_original_total = \
                 self._price_level_stats[BID][best_bid_price]['volume_original_total']
             volume_disclosed_total = \
@@ -430,19 +433,11 @@ class LimitOrderBook(object):
         """
 
         try:
-            best_price = self._book_data[ASK].min_key()
+            best_price = self._book_prices[ASK].min_key()
         except:
             return None
         else:
             return best_price
-        # prices = self._book_data[ASK].keys()
-        # if prices == []:
-        #     return None
-        # else:
-        #     best_price = min(prices)
-        #     if not self._book_data[ASK][best_price]:
-        #         raise RuntimeError('empty price level detected')
-        #     return best_price
 
     def best_ask_quantity(self):
         """
@@ -459,7 +454,6 @@ class LimitOrderBook(object):
         
         best_ask_price = self.best_ask_price()
         if best_ask_price is not None:
-            od = self.price_level(ASK, best_ask_price)
             volume_original_total = \
                 self._price_level_stats[ASK][best_ask_price]['volume_original_total']
             volume_disclosed_total = \
@@ -582,9 +576,9 @@ class LimitOrderBook(object):
             
             # Print queue states:
             print 'sell queue:'
-            self.print_book(self._book_data[SELL])
+            self.print_book(SELL)
             print 'buy queue:'
-            self.print_book(self._book_data[BUY])
+            self.print_book(BUY)
 
         if self.log_events:
             event = self._events[-1]
@@ -1057,12 +1051,14 @@ class LimitOrderBook(object):
         self.delete_order(order)
         self.record_event(**event)
                                                     
-    def print_book(self, book):
+    def print_book(self, indicator):
         """
         Print parts of the specified book dictionary in a neat manner.
         """
 
-        for price in book.keys(True):
+        book = self._book_data[indicator]
+        prices = self._book_prices[indicator]
+        for price in prices.keys(True):
             print '%06.2f: ' % price,            
             for order_number in book[price]:
                 order = book[price][order_number]
