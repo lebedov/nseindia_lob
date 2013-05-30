@@ -1046,13 +1046,13 @@ class LimitOrderBook(object):
                best_ask_volume_original=best_ask_volume_original,    
                trade={})
 
-        self.logger.info('attempting cancel of order %s' % order['order_number']) 
-        
-        # This exception should never be thrown:
-        if order['mkt_flag'] == 'Y':
-            raise ValueError('cannot cancel market order')
+        self.logger.info('attempting cancel of order %s' % order['order_number'])
 
-        self.delete_order(order)
+        # Filter out cancellation orders that are listed as market orders:
+        if order['mkt_flag'] == 'Y':
+            self.logger.info('cannot cancel market order %s' % order['order_number'])
+        else:
+            self.delete_order(order)
         self.record_event(**event)
                                                     
     def print_book(self, indicator):
@@ -1139,14 +1139,14 @@ if __name__ == '__main__':
     tp = pandas.read_csv(file_name,
                          names=col_names,
                          iterator=True)
-    for i in xrange(50):
-        data = tp.get_chunk(200)
-        lob.process(data)
-    # while True:
-    #     data = tp.get_chunk(100)
-    #     if data.irow(0)['trans_time'] > '10:15:00.000000':
-    #         break
+    # for i in xrange(50):
+    #     data = tp.get_chunk(200)
     #     lob.process(data)
+    while True:
+        data = tp.get_chunk(100)
+        if data.irow(0)['trans_time'] > '9:25:00.000000':
+            break
+        lob.process(data)
 
     # while True:
     #     try:
