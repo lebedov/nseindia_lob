@@ -1,20 +1,7 @@
 #!/usr/bin/env python
 
 """
-Limit order book 
-
-Notes
------
-* Market orders are immediately executed at best buy and best ask values; if the
-  book is empty (i.e., no limit orders have been placed yet), the market order
-  is automatically canceled.
-* All outstanding limit orders expire at the end of the day.
-* Attempting to execute a buy/sell market order prior to the arrival of any
-  sell/buy limit orders that can satisfy it (both in terms of quantity and price).
-* When a limit order arrives that can satisfy an outstanding limit order, it is
-  executed and the corresponding order is removed from the book.
-* More information re LOBs can be found at 
-  http://iopscience.iop.org/0295-5075/75/3/510/fulltext/
+Limit order book for Indian exchange.
 """
 
 import bintrees
@@ -58,23 +45,12 @@ ASK = SELL = 'S'
 
 class LimitOrderBook(object):
     """
-    Limit order book.
-
-    Parameters    
-    ----------
-
-    Notes
-    -----
-    Orders at each price level are stored in an ordered dict keyed by order
-    number; new orders are implicitly appended whenever they are added to the dict.
+    Limit order book for Indian exchange.
 
     """
     
-    def __init__(self, tick_size=0.05):
+    def __init__(self):
         self.logger = logging.getLogger('lob')
-
-        # All limit prices are a multiple of the tick size:
-        self.tick_size = tick_size
 
         # The order data in the book is stored in two dictionaries of ordered
         # dicts; the keys of each dictionary correspond to the price levels of
@@ -503,6 +479,12 @@ class LimitOrderBook(object):
     def record_event(self, **kwargs):
         """
         This routine saves the specified event information.
+
+        Parameters
+        ----------
+        kwargs : dict
+            Event data.
+            
         """
 
         # Events to record: cancel bid, cancel ask, add bid, add ask,
@@ -1142,9 +1124,11 @@ if __name__ == '__main__':
     # for i in xrange(50):
     #     data = tp.get_chunk(200)
     #     lob.process(data)
+
+    # Process orders that occurred before a certain cutoff time:
     while True:
         data = tp.get_chunk(100)
-        if data.irow(0)['trans_time'] > '9:25:00.000000':
+        if data.irow(0)['trans_time'] > '09:25:00.000000':
             break
         lob.process(data)
 
