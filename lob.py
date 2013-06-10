@@ -657,19 +657,21 @@ class LimitOrderBook(object):
                     break
 
                 # Orders in the book that have explicitly disclosed (i.e.,
-                # non-zero) volumes must be processed before others; hence, we
+                # non-zero) volumes are assumed to actually be completely
+                # hidden; therefore, they must be processed AFTER
+                # orders with 0 disclosed volume. We therefore 
                 # need to reorder the orders in the identified price level to
-                # list all orders with disclosed volumes before the others:
+                # list all orders with 0 disclosed volumes before the others:
                 order_number_list = []
-                for order_number in od.keys():
-                    if od[order_number]['volume_disclosed'] > 0:
-                        order_number_list.append(order_number)
                 for order_number in od.keys():
                     if od[order_number]['volume_disclosed'] == 0:
                         order_number_list.append(order_number)
+                for order_number in od.keys():
+                    if od[order_number]['volume_disclosed'] > 0:
+                        order_number_list.append(order_number)
                         
-                # Move through the limit orders in the price level queue from oldest
-                # to newest:
+                # Move through the limit orders in the price level queue from
+                # oldest to newest:
                 for order_number in order_number_list:
                     curr_order = od[order_number]
                     if curr_order['buy_sell_indicator'] == BUY:
@@ -804,15 +806,17 @@ class LimitOrderBook(object):
                         break
 
                     # Orders in the book that have explicitly disclosed (i.e.,
-                    # non-zero) volumes must be processed before others; hence, we
+                    # non-zero) volumes are assumed to actually be completely
+                    # hidden; therefore, they must be processed AFTER
+                    # orders with 0 disclosed volume. We therefore 
                     # need to reorder the orders in the identified price level to
-                    # list all orders with disclosed volumes before the others:
+                    # list all orders with 0 disclosed volumes before the others:
                     order_number_list = []
                     for order_number in od.keys():
-                        if od[order_number]['volume_disclosed'] > 0:
+                        if od[order_number]['volume_disclosed'] == 0:
                             order_number_list.append(order_number)
                     for order_number in od.keys():
-                        if od[order_number]['volume_disclosed'] == 0:
+                        if od[order_number]['volume_disclosed'] > 0:
                             order_number_list.append(order_number)
                     
                     # Move through the limit orders in the price level queue from
