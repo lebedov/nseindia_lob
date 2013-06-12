@@ -4,7 +4,7 @@
 Limit order book for Indian exchange.
 """
 
-import bintrees
+import rbtree
 import copy
 import csv
 import datetime
@@ -69,8 +69,8 @@ class LimitOrderBook(object):
         # the book data results in a segfault. Saving only the prices in one of
         # these classes appears to prevent this problem from occurring:
         self._book_prices = {}
-        self._book_prices[BID] = bintrees.FastBinaryTree()
-        self._book_prices[ASK] = bintrees.FastBinaryTree()
+        self._book_prices[BID] = rbtree.rbtree()
+        self._book_prices[ASK] = rbtree.rbtree()
         
         # This dictionary maps price levels to dictionaries that contain several
         # running stats for each level
@@ -96,6 +96,10 @@ class LimitOrderBook(object):
         # Events are written to this file:
         self._events_log_file = open('events.log', 'w')
         self._events_writer = csv.writer(self._events_log_file)
+
+        # Stats are written to this file:
+        self._stats_log_file = open('stats.log', 'w')
+        self._stats_writer = csv.writer(self._stats_log_file)
         
         # Accumulated data for daily stats is stored in this dictionary:        
         self._daily_stats = {}
@@ -109,6 +113,14 @@ class LimitOrderBook(object):
             }
         self._curr_daily_stats = copy.copy(self._init_daily_stats)
         self._last_order_time = 0.0
+
+        # Current day:
+        self.day = None
+
+        # Expiration date of securities; we use this to only consider securities
+        # with a single expiration date (which is arbitrarily set to that of the
+        # first order considered):
+        self.expiry_date = ''
         
         # Order interarrival times are stored in this dictionary:
         self._order_interarrival_time = {}
@@ -117,6 +129,7 @@ class LimitOrderBook(object):
     def __del__(self):
         try:
             self._events_log_file.close()
+            self._stats_log_file.close()
         except:
             pass
             
@@ -136,9 +149,10 @@ class LimitOrderBook(object):
             self._book_data[d].clear()
             self._book_prices[d].clear()
             self._price_level_stats[d].clear()
+            self.day = None
         self._book_orders_to_price.clear()
-        
-    def process(self, df, show_output=True, log_events=True):
+
+    def process(self, df, show_output=True, log_events=True, log_stats=True):
         """
         Process order data
 
@@ -148,14 +162,16 @@ class LimitOrderBook(object):
             Each row of this DataFrame instance contains a single order.
         show_output : bool
             Display last event and book state after recording every event.
-            
+        log_events : bool
+            Log events to a file.
+        log_stats : bool
+            Log stats to a file.
+        
         """
 
         self.show_output = show_output
         self.log_events = log_events
-        
-        expiry_date = ''
-        day = None
+                
         for row in df.iterrows():
             order = row[1].to_dict()
             self.logger.info('processing order: %i' % order['order_number'])
@@ -163,30 +179,30 @@ class LimitOrderBook(object):
             # Reset the limit order book and trade volume variables when a new
             # day of orders begins:
             trans_date = datetime.datetime.strptime(order['trans_date'], '%m/%d/%Y')
-            if day is None:
-                day = trans_date.day
-                self.logger.info('setting day: %s' % day)
+            if self.day is None:
+                self.day = trans_date.day
+                self.logger.info('setting day: %s' % self.day)
 
                 # Reset variables used for accumulating daily stats:
-                self._curr_day = order['trans_date']
+                self._curr_date = order['trans_date']
                 self._last_order_time = \
                   datetime.datetime.strptime(order['trans_date']+' '+\
                                              order['trans_time'],
                                              '%m/%d/%Y %H:%M:%S.%f')
                 self._curr_daily_stats = \
                     copy.copy(self._init_daily_stats)
-            elif day != trans_date.day:
+            elif self.day != trans_date.day:
                 self.logger.info('new day - book reset')
                 self.clear_book()
 
                 # Save daily stats before resetting variables used for
                 # accumulating daily stats:
-                self._curr_day = order['trans_date']
+                self._curr_date = order['trans_date']
                 self._last_order_time = \
                   datetime.datetime.strptime(order['trans_date']+' '+\
                                              order['trans_time'],
                                              '%m/%d/%Y %H:%M:%S.%f')                
-                self._daily_stats[self._curr_day] = \
+                self._daily_stats[self._curr_date] = \
                     copy.copy(self.curr_daily_stats)
                 self._curr_daily_stats = \
                     copy.copy(self._init_daily_stats)
@@ -194,11 +210,11 @@ class LimitOrderBook(object):
             # Restrict all orders processed to a single expiry date because
             # futures orders with different expiry dates are effectively
             # distinct securities insofar as the LOB is concerned:
-            if not expiry_date:
-                self.logger.info('setting expiry date: %s' % expiry_date)
-                expiry_date = order['expiry_date']                
+            if not self.expiry_date:
+                self.logger.info('setting expiry date: %s' % self.expiry_date)
+                self.expiry_date = order['expiry_date']                
             else:
-                if expiry_date != order['expiry_date']:
+                if self.expiry_date != order['expiry_date']:
                     self.logger.info('skipping order %s with expiry date %s' % \
                                      (order['order_number'], order['expiry_date']))
                     continue
@@ -219,7 +235,7 @@ class LimitOrderBook(object):
                                  order['activity_type'])
                 
         # Save current stats when no more orders are available:
-        self._daily_stats[self._curr_day] = \
+        self._daily_stats[self._curr_date] = \
             copy.copy(self._curr_daily_stats)
 
     def create_level(self, indicator, price):
@@ -263,7 +279,7 @@ class LimitOrderBook(object):
         """
         
         self._book_data[indicator].pop(price)
-        self._book_prices[indicator].pop(price)
+        del self._book_prices[indicator][price]
         self._price_level_stats[indicator].pop(price)
         self.logger.info('deleted price level: %s, %f' % (indicator, price))
 
@@ -318,7 +334,7 @@ class LimitOrderBook(object):
         """
 
         order_number = order['order_number']
-        try:
+        try:            
             od = self._book_orders_to_price.pop(order_number)
         except:
             self.logger.info('order not found: %s' % order_number)
@@ -356,7 +372,7 @@ class LimitOrderBook(object):
         """
 
         try:
-            best_price = self._book_prices[BID].max_key()
+            best_price = self._book_prices[BID].max()
         except:
             return None
         else:
@@ -403,7 +419,7 @@ class LimitOrderBook(object):
         """
 
         try:
-            best_price = self._book_prices[ASK].min_key()
+            best_price = self._book_prices[ASK].min()
         except:
             return None
         else:
@@ -551,6 +567,16 @@ class LimitOrderBook(object):
         if self.log_events:
             row = self.event_to_row(event)
             self._events_writer.writerow(row)
+        if self.log_events:
+            row = [event['time'],
+                   event['date'],
+                   self._curr_daily_stats['num_orders'],
+                   self._curr_daily_stats['num_trades'],
+                   self._curr_daily_stats['trade_volume_total'],
+                   self._curr_daily_stats['trade_price_mean'],
+                   self._curr_daily_stats['trade_price_std'],
+                   self._curr_daily_stats['mean_order_interarrival_time']]
+            self._stats_writer.writerow(row)
             
     def add(self, new_order, is_original):
         """
@@ -1060,7 +1086,7 @@ class LimitOrderBook(object):
 
         book = self._book_data[indicator]
         prices = self._book_prices[indicator]
-        for price in prices.keys(True):
+        for price in prices.keys():
             print '%06.2f: ' % price,            
             for order_number in book[price]:
                 order = book[price][order_number]
@@ -1137,7 +1163,7 @@ if __name__ == '__main__':
     # Process orders that occurred before a certain cutoff time:
     while True:
         data = tp.get_chunk(100)
-        if data.irow(0)['trans_time'] > '09:25:00.000000':
+        if data.irow(0)['trans_time'] > '09:20:00.000000':
             break
         lob.process(data, show_output=False)
 
