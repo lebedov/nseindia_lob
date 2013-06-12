@@ -34,8 +34,8 @@ with open(sys.argv[1], 'r') as f:
                 trade_price_std = \
                   np.sqrt((trade_price_std**2*(num_trades-1)+(float(row[7])-trade_price_mean)**2)/num_trades)
 
-print 'total trade volume: ', trade_volume_total
-print 'number of trades: ', num_trades
-print 'trade price mean:', trade_price_mean
-print 'trade price STD:', trade_price_std
+print 'Number of trades:             ', num_trades
+print 'Total trade volume:           ', trade_volume_total
+print 'Mean trade price:             ', trade_price_mean
+print 'Trade price STD:              ', trade_price_std
 

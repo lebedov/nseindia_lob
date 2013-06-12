@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Limit order book for Indian exchange.
+Limit order book simulation for Indian security exchange.
 """
 
 import rbtree
@@ -47,11 +47,25 @@ class LimitOrderBook(object):
     """
     Limit order book for Indian exchange.
 
+    Parameters
+    ----------
+    show_output : bool
+        Display last event and book state after recording every event.
+    events_log_file : str
+        File in which to log events. If set to None, no events are logged.
+    stats_log_file : bool
+        File in which to log running stats. If set to None, no running stats are logged.
+    daily_stats_file : bool
+        File in which to log accumulated daily stats. If set to None, no daily stats are logged.
+    
     """
     
-    def __init__(self):
+    def __init__(self, show_output=True, events_log_file='events.log',
+                 stats_log_file='stats.log', daily_stats_log_file='daily_stats.log'):
         self.logger = logging.getLogger('lob')
 
+        self._show_output = show_output
+        
         # The order data in the book is stored in two dictionaries of ordered
         # dicts; the keys of each dictionary correspond to the price levels of
         # each ordered dict. The ordered dicts are used as
@@ -71,16 +85,18 @@ class LimitOrderBook(object):
         self._book_prices = {}
         self._book_prices[BID] = rbtree.rbtree()
         self._book_prices[ASK] = rbtree.rbtree()
-        
+
+        # Values with which to initialize price level stats:
+        self._init_price_level_stats = {
+            'volume_original_total': 0,
+            'volume_disclosed_total': 0
+            }
+
         # This dictionary maps price levels to dictionaries that contain several
         # running stats for each level
         self._price_level_stats = {}
         self._price_level_stats[BID] = {}
         self._price_level_stats[ASK] = {}
-        self._init_price_level_stats = {
-            'volume_original_total': 0,
-            'volume_disclosed_total': 0
-            }
         
         # This dictionary maps the IDs of orders that are in the book to their
         # price level:
@@ -94,23 +110,33 @@ class LimitOrderBook(object):
         self._original_event_counter = 1
         
         # Events are written to this file:
-        self._events_log_file = open('events.log', 'w')
-        self._events_writer = csv.writer(self._events_log_file)
+        self._events_log_file = events_log_file
+        if events_log_file:
+            self._events_log_fh = open(events_log_file, 'w')
+            self._events_log_writer = csv.writer(self._events_log_fh)
 
         # Stats are written to this file:
-        self._stats_log_file = open('stats.log', 'w')
-        self._stats_writer = csv.writer(self._stats_log_file)
-        
-        # Accumulated data for daily stats is stored in this dictionary:        
-        self._daily_stats = {}
+        self._stats_log_file = stats_log_file
+        if stats_log_file:
+            self._stats_log_fh = open(stats_log_file, 'w')
+            self._stats_log_writer = csv.writer(self._stats_log_fh)
+
+        # Daily stats are written to this file:
+        self._daily_stats_log_file = daily_stats_log_file
+        if daily_stats_log_file:
+            self._daily_stats_log_fh = open(daily_stats_log_file, 'w')
+            self._daily_stats_log_writer = csv.writer(self._daily_stats_log_fh)
+
+        # Values with which to initialize daily stats:
         self._init_daily_stats = {
             'num_orders': 0,
             'num_trades': 0,
             'trade_volume_total': 0.0,
             'trade_price_mean': 0.0,
             'trade_price_std': 0.0,
-            'mean_order_interarrival_time': 0.0
-            }
+            'mean_order_interarrival_time': 0.0}
+
+        # Daily stats are accumulated in this dictionary:
         self._curr_daily_stats = copy.copy(self._init_daily_stats)
         self._last_order_time = 0.0
 
@@ -127,20 +153,24 @@ class LimitOrderBook(object):
         self._curr_order_interarrival_time = None
 
     def __del__(self):
+
+        # Close all file handles before the object instance is cleaned up:
         try:
-            self._events_log_file.close()
-            self._stats_log_file.close()
+            self._events_log_fh.close()            
         except:
             pass
-            
+        try:
+            self._stats_log_fh.close()
+        except:
+            pass
+        try:
+            self._daily_stats_log_fh.close()
+        except:
+            pass
+        
     def clear_book(self):
         """
         Clear all outstanding limit orders from the book
-
-        Notes
-        -----
-        The trade counter is reset to 1, but all previously
-        recorded trades are not erased.
         
         """
 
@@ -152,7 +182,7 @@ class LimitOrderBook(object):
             self.day = None
         self._book_orders_to_price.clear()
 
-    def process(self, df, show_output=True, log_events=True, log_stats=True):
+    def process(self, df):
         """
         Process order data
 
@@ -160,50 +190,33 @@ class LimitOrderBook(object):
         ----------
         df : pandas.DataFrame
             Each row of this DataFrame instance contains a single order.
-        show_output : bool
-            Display last event and book state after recording every event.
-        log_events : bool
-            Log events to a file.
-        log_stats : bool
-            Log stats to a file.
-        
+            
         """
-
-        self.show_output = show_output
-        self.log_events = log_events
                 
         for row in df.iterrows():
             order = row[1].to_dict()
             self.logger.info('processing order: %i' % order['order_number'])
 
-            # Reset the limit order book and trade volume variables when a new
-            # day of orders begins:
             trans_date = datetime.datetime.strptime(order['trans_date'], '%m/%d/%Y')
-            if self.day is None:
+            if self.day != trans_date.day:
+
+                # Reset the limit order book and trade volume variables when a new
+                # day of orders begins:
+                self.logger.info('new day - book reset')
+                self.clear_book()
                 self.day = trans_date.day
                 self.logger.info('setting day: %s' % self.day)
 
-                # Reset variables used for accumulating daily stats:
-                self._curr_date = order['trans_date']
-                self._last_order_time = \
-                  datetime.datetime.strptime(order['trans_date']+' '+\
-                                             order['trans_time'],
-                                             '%m/%d/%Y %H:%M:%S.%f')
-                self._curr_daily_stats = \
-                    copy.copy(self._init_daily_stats)
-            elif self.day != trans_date.day:
-                self.logger.info('new day - book reset')
-                self.clear_book()
-
-                # Save daily stats before resetting variables used for
-                # accumulating daily stats:
+                # Save the daily stats:
+                if self._daily_stats_log_fh:
+                    self.record_daily_stats(order['trans_time'], order['trans_date'])
+                
+                # Reset variables used for accumulating daily stats:                
                 self._curr_date = order['trans_date']
                 self._last_order_time = \
                   datetime.datetime.strptime(order['trans_date']+' '+\
                                              order['trans_time'],
                                              '%m/%d/%Y %H:%M:%S.%f')                
-                self._daily_stats[self._curr_date] = \
-                    copy.copy(self.curr_daily_stats)
                 self._curr_daily_stats = \
                     copy.copy(self._init_daily_stats)
 
@@ -235,8 +248,6 @@ class LimitOrderBook(object):
                                  order['activity_type'])
                 
         # Save current stats when no more orders are available:
-        self._daily_stats[self._curr_date] = \
-            copy.copy(self._curr_daily_stats)
 
     def create_level(self, indicator, price):
         """
@@ -552,7 +563,7 @@ class LimitOrderBook(object):
                   np.sqrt((self._curr_daily_stats['trade_price_std']**2*N_prev+\
                           (event['price']-self._curr_daily_stats['trade_price_mean'])**2)/N)
 
-        if self.show_output:
+        if self._show_output:
             print '----------------------------------------'
 
             # Print last event:
@@ -564,19 +575,55 @@ class LimitOrderBook(object):
             print 'buy queue:'
             self.print_book(BUY)
 
-        if self.log_events:
+        if self._events_log_file:
             row = self.event_to_row(event)
-            self._events_writer.writerow(row)
-        if self.log_events:
-            row = [event['time'],
-                   event['date'],
+            self._events_log_writer.writerow(row)
+
+    def record_stats(self, t, d):
+        """
+        Record running stats.
+
+        Parameters
+        ----------
+        t : str
+            Time.
+        d : str
+            Date.
+            
+        """
+        
+        if self._stats_log_file:
+            row = [t, d,
                    self._curr_daily_stats['num_orders'],
                    self._curr_daily_stats['num_trades'],
                    self._curr_daily_stats['trade_volume_total'],
                    self._curr_daily_stats['trade_price_mean'],
                    self._curr_daily_stats['trade_price_std'],
                    self._curr_daily_stats['mean_order_interarrival_time']]
-            self._stats_writer.writerow(row)
+            self._stats_log_writer.writerow(row)
+
+    def record_daily_stats(self, t, d):
+        """
+        Record daily stats.
+
+        Parameters
+        ----------
+        t : str
+            Time.
+        d : str
+            Date.
+                    
+        """
+        
+        if self._daily_stats_log_file:
+            row = [t, d,
+                   self._curr_daily_stats['num_orders'],
+                   self._curr_daily_stats['num_trades'],
+                   self._curr_daily_stats['trade_volume_total'],
+                   self._curr_daily_stats['trade_price_mean'],
+                   self._curr_daily_stats['trade_price_std'],
+                   self._curr_daily_stats['mean_order_interarrival_time']]
+            self._daily_stats_log_writer.writerow(row)
             
     def add(self, new_order, is_original):
         """
@@ -706,6 +753,9 @@ class LimitOrderBook(object):
                         event['volume_original'] = volume_original
                         event['volume_disclosed'] = volume_disclosed
                         self.record_event(**event)
+
+                        # Record running stats:
+                        self.record_stats(event['time'], event['date'])
                         
                         self.delete_order(curr_order) 
                         volume_original = 0.0                 
@@ -730,6 +780,9 @@ class LimitOrderBook(object):
                         event['volume_original'] = volume_original
                         event['volume_disclosed'] = volume_disclosed
                         self.record_event(**event)
+
+                        # Record running stats:
+                        self.record_stats(event['time'], event['date'])
                         
                         if new_order['io_flag'] == 'N':
                             self.logger.info('Non-IOC order - residual volume preserved')
@@ -766,6 +819,9 @@ class LimitOrderBook(object):
                         event['volume_disclosed'] = curr_order['volume_disclosed']
                         self.record_event(**event)
 
+                        # Record running stats:
+                        self.record_stats(event['time'], event['date'])
+                        
                         volume_original -= curr_order['volume_original']
                         self.delete_order(curr_order)
                     else:
@@ -898,6 +954,9 @@ class LimitOrderBook(object):
                             event['volume_original'] = volume_original
                             event['volume_disclosed'] = volume_disclosed
                             self.record_event(**event)
+
+                            # Record running stats:
+                            self.record_stats(event['time'], event['date'])
                             
                             if new_order['io_flag'] == 'N':
                                 self.logger.info('Non-IOC order - residual volume preserved')  
@@ -931,6 +990,9 @@ class LimitOrderBook(object):
                             event['volume_disclosed'] = curr_order['volume_disclosed']
                             self.record_event(**event)
 
+                            # Record running stats:
+                            self.record_stats(event['time'], event['date'])
+                            
                             volume_original -= curr_order['volume_original']
                             self.delete_order(curr_order) 
                         else:
@@ -1037,6 +1099,7 @@ class LimitOrderBook(object):
                 self.logger.info('undefined modify scenario')
                             
         self.record_event(**event)
+        self.record_stats(event['time'], event['date'])
         
     def cancel(self, order):
         """
@@ -1078,7 +1141,8 @@ class LimitOrderBook(object):
         else:
             self.delete_order(order)
         self.record_event(**event)
-                                                    
+        self.record_stats(event['time'], event['date'])
+        
     def print_book(self, indicator):
         """
         Print parts of the specified book dictionary in a neat manner.
@@ -1114,22 +1178,12 @@ class LimitOrderBook(object):
                event['best_ask_volume_original']]
         return row
     
-    def print_events(self, file_name=None):
-        if file_name is None:
-            w = csv.writer(sys.stdout)
-        else:
-            f = open(file_name, 'wb')
-            w = csv.writer(f)
-        for entry in self._events.iteritems():
-            n = entry[0]
-            event = entry[1]
-            row = self.event_to_row(event)
-            w.writerow(row)
-        if file_name is not None:
-            f.close()
-
-    def print_stats(self):
-        print '----------------------------------------'
+    def print_daily_stats(self):
+        """
+        Display daily stats.
+        """
+        
+        print '--------------------------------------------'
         print 'Number of orders:             ', self._curr_daily_stats['num_orders']
         print 'Number of trades:             ', self._curr_daily_stats['num_trades']
         print 'Total trade volume:           ', self._curr_daily_stats['trade_volume_total']
@@ -1147,7 +1201,7 @@ if __name__ == '__main__':
     for h in logging.root.handlers:
         logging.root.removeHandler(h)
                          
-    lob = LimitOrderBook()
+    lob = LimitOrderBook(show_output=False)
     fh = logging.FileHandler('lob.log', 'w')
     fh.setFormatter(logging.Formatter(format))
     lob.logger.addHandler(fh)
@@ -1164,9 +1218,9 @@ if __name__ == '__main__':
     while True:
         data = tp.get_chunk(100)
         if data.irow(0)['trans_time'] > '09:20:00.000000':
-            break
-        lob.process(data, show_output=False)
-
+            break        
+        lob.process(data)
+        
     # while True:
     #     try:
     #         data = tp.get_chunk(200)
@@ -1175,5 +1229,5 @@ if __name__ == '__main__':
     #     else:
     #         lob.process(data)
             
-    lob.print_stats()
+    lob.print_daily_stats()
     print 'Processing time:              ', (time.time()-start)
