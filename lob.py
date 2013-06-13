@@ -76,12 +76,14 @@ class LimitOrderBook(object):
         self._book_data[BID] = {}
         self._book_data[ASK] = {}
 
-        # Use Cython-based bintrees classes to keep track of the best bid and
+        # Use Cython-based rbtrees classes to keep track of the best bid and
         # ask without having to compute the maximum/minimum prices of the buy
         # and sell portions of the book:
-        # XXX For some reason, using the Cython-based bintrees classes to store
-        # the book data results in a segfault. Saving only the prices in one of
-        # these classes appears to prevent this problem from occurring:
+        # XXX Theoretically, the bintrees package could also be used for this
+        # purpose; however, it causes Python to eventually segfault when used
+        # in this LOB implementation. Saving only the prices in one of
+        # the bintrees classes also doesn't appear to prevent this problem from
+        # occurring.
         self._book_prices = {}
         self._book_prices[BID] = rbtree.rbtree()
         self._book_prices[ASK] = rbtree.rbtree()
@@ -1196,7 +1198,7 @@ if __name__ == '__main__':
     start = time.time()
     
     format = '%(asctime)s %(name)s %(levelname)s [%(funcName)s] %(message)s'
-    logging.basicConfig(level=logging.DEBUG, format=format)
+    logging.basicConfig(level=logging.WARNING, format=format)
 
     # Remove root log handlers:
     for h in logging.root.handlers:
