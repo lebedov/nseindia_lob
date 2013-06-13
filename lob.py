@@ -1216,18 +1216,14 @@ if __name__ == '__main__':
 
     # Process orders that occurred before a certain cutoff time:
     while True:
-        data = tp.get_chunk(100)
-        if data.irow(0)['trans_time'] > '09:20:00.000000':
-            break        
-        lob.process(data)
-        
-    # while True:
-    #     try:
-    #         data = tp.get_chunk(200)
-    #     except StopIteration:
-    #         break
-    #     else:
-    #         lob.process(data)
-            
+        try:
+            data = tp.get_chunk(500)
+        except StopIteration:
+            break
+        else:
+            #if data.irow(0)['trans_time'] > '09:20:00.000000':
+            #    break        
+            lob.process(data)
+
     lob.print_daily_stats()
     print 'Processing time:              ', (time.time()-start)
