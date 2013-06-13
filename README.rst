@@ -10,10 +10,10 @@ Requirements
 The code requires the following to run:
 
 * Python 2.7 or later.
-* `bintrees <http://bitbucket.org/mozman/bintrees/>`_ 1.0.3 or later.
 * `numpy <http://www.numpy.org/>`_ 1.7.0 or later.
 * `pandas <http://pandas.pydata.org/>`_ 0.10 or later.
 * `odict <https://github.com/bluedynamics/odict/>`_ 1.5.0 or later.
+* `rbtree <https://bitbucket.org/bcsaller/rbtree/>`_ 0.9.0 or later.
 
 Author
 ------
