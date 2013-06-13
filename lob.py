@@ -200,23 +200,25 @@ class LimitOrderBook(object):
             trans_date = datetime.datetime.strptime(order['trans_date'], '%m/%d/%Y')
             if self.day != trans_date.day:
 
+                # Save the daily stats:
+                if self._daily_stats_log_fh and self.day is not None:
+                    self.record_daily_stats(order['trans_date'])
+
                 # Reset the limit order book and trade volume variables when a new
                 # day of orders begins:
                 self.logger.info('new day - book reset')
                 self.clear_book()
                 self.day = trans_date.day
                 self.logger.info('setting day: %s' % self.day)
-
-                # Save the daily stats:
-                if self._daily_stats_log_fh:
-                    self.record_daily_stats(order['trans_time'], order['trans_date'])
                 
-                # Reset variables used for accumulating daily stats:                
-                self._curr_date = order['trans_date']
+                # Initialize last order time to the time of the first
+                # order of the day:
                 self._last_order_time = \
                   datetime.datetime.strptime(order['trans_date']+' '+\
                                              order['trans_time'],
-                                             '%m/%d/%Y %H:%M:%S.%f')                
+                                             '%m/%d/%Y %H:%M:%S.%f')        
+        
+                # Reset variables used for accumulating daily stats:
                 self._curr_daily_stats = \
                     copy.copy(self._init_daily_stats)
 
@@ -529,6 +531,7 @@ class LimitOrderBook(object):
                                                    '%m/%d/%Y %H:%M:%S.%f')
             curr_interarrival_time = \
                 (date_time-self._last_order_time).total_seconds()
+            self._last_order_time = date_time
             if self._curr_daily_stats['num_orders'] == 1:
                 self._curr_daily_stats['mean_order_interarrival_time'] = \
                     curr_interarrival_time
@@ -602,21 +605,19 @@ class LimitOrderBook(object):
                    self._curr_daily_stats['mean_order_interarrival_time']]
             self._stats_log_writer.writerow(row)
 
-    def record_daily_stats(self, t, d):
+    def record_daily_stats(self, d):
         """
         Record daily stats.
 
         Parameters
         ----------
-        t : str
-            Time.
         d : str
             Date.
                     
         """
         
         if self._daily_stats_log_file:
-            row = [t, d,
+            row = [d,
                    self._curr_daily_stats['num_orders'],
                    self._curr_daily_stats['num_trades'],
                    self._curr_daily_stats['trade_volume_total'],
