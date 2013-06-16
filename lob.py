@@ -1203,13 +1203,18 @@ if __name__ == '__main__':
     # Remove root log handlers:
     for h in logging.root.handlers:
         logging.root.removeHandler(h)
-                         
-    lob = LimitOrderBook(show_output=False)
-    fh = logging.FileHandler('lob.log', 'w')
+     
+    root_dir = '/user/user2/lgivon/india_limit_order_book/'
+                    
+    lob = LimitOrderBook(show_output=False, 
+		         events_log_file=root_dir+'events.log',
+			 stats_log_file=root_dir+'stats.log',
+			 daily_stats_log_file=root_dir+'daily_stats.log')
+    fh = logging.FileHandler(root_dir+'lob.log', 'w')
     fh.setFormatter(logging.Formatter(format))
     lob.logger.addHandler(fh)
 
-    file_name = 'AXISBANK-orders.csv'
+    file_name = root_dir+'AXISBANK-orders.csv'
     tp = pandas.read_csv(file_name,
                          names=col_names,
                          iterator=True)
