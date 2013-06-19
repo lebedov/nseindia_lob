@@ -4,8 +4,9 @@
 Limit order book simulation for Indian security exchange.
 """
 
-import _lob as lob
+import _lob
 
+import glob
 import logging
 import pandas
 import time
@@ -20,35 +21,34 @@ if __name__ == '__main__':
     for h in logging.root.handlers:
         logging.root.removeHandler(h)
 
-    #root_dir = '/user/user2/lgivon/india_limit_order_book/'
-    root_dir = './'
+    root_dir = '/user/user2/lgivon/india_limit_order_book/'
+    #root_dir = './'
 
-    lob_obj = lob.LimitOrderBook(show_output=False, sparse_events=True,
-                                 events_log_file=root_dir+'events.log',
-                                 stats_log_file=None,
-                                 daily_stats_log_file=root_dir+'daily_stats.log')
+    lob = _lob.LimitOrderBook(show_output=False, sparse_events=True,
+                              events_log_file=root_dir+'events.log.gz',
+                              stats_log_file=None,
+                              daily_stats_log_file=root_dir+'daily_stats.log.gz')
     fh = logging.FileHandler(root_dir+'lob.log', 'w')
     fh.setFormatter(logging.Formatter(format))
-    lob_obj.logger.addHandler(fh)
+    lob.logger.addHandler(fh)
 
-    file_name = root_dir+'AXISBANK-orders.csv'
-    tp = pandas.read_csv(file_name,
-                         names=lob.col_names,
-                         iterator=True)
-    # for i in xrange(50):
-    #     data = tp.get_chunk(200)
-    #     lob.process(data)
+    # Process all available files; assumes that the files are named in
+    # a way such that their sort order corresponds to the
+    # chronological order of their respective contents:    
+    for file_name in sorted(glob.glob(root_dir+'AXISBANK-orders*.csv')):
+        tp = pandas.read_csv(file_name,
+                             names=_lob.col_names,
+                             iterator=True)
+        while True:
+            try:
+                data = tp.get_chunk(500)
+            except StopIteration:
+                break
+            else:
+                # Process orders that occurred before a certain cutoff time:
+                #if data.irow(0)['trans_time'] > '09:25:00.000000':
+                #    break        
+                lob.process(data)
 
-    # Process orders that occurred before a certain cutoff time:
-    while True:
-        try:
-            data = tp.get_chunk(500)
-        except StopIteration:
-            break
-        else:
-            if data.irow(0)['trans_time'] > '09:25:00.000000':
-                break        
-            lob_obj.process(data)
-
-    lob_obj.print_daily_stats()
+    lob.print_daily_stats()
     print 'Processing time:              ', (time.time()-start)

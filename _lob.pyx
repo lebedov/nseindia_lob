@@ -8,6 +8,7 @@ import rbtree
 import copy
 import csv
 import datetime
+import gzip
 import logging
 import numpy as np
 import odict
@@ -63,8 +64,8 @@ class LimitOrderBook(object):
     
     """
     
-    def __init__(self, show_output=True, sparse_events=True, events_log_file='events.log',
-                 stats_log_file='stats.log', daily_stats_log_file='daily_stats.log'):
+    def __init__(self, show_output=True, sparse_events=True, events_log_file='events.log.gz',
+                 stats_log_file='stats.log.gz', daily_stats_log_file='daily_stats.log.gz'):
         self.logger = logging.getLogger('lob')
 
         self._show_output = show_output
@@ -127,19 +128,19 @@ class LimitOrderBook(object):
         # Events are written to this file:
         self._events_log_file = events_log_file
         if events_log_file:
-            self._events_log_fh = open(events_log_file, 'w')
+            self._events_log_fh = gzip.open(events_log_file, 'w')
             self._events_log_writer = csv.writer(self._events_log_fh)
 
         # Stats are written to this file:
         self._stats_log_file = stats_log_file
         if stats_log_file:
-            self._stats_log_fh = open(stats_log_file, 'w')
+            self._stats_log_fh = gzip.open(stats_log_file, 'w')
             self._stats_log_writer = csv.writer(self._stats_log_fh)
 
         # Daily stats are written to this file:
         self._daily_stats_log_file = daily_stats_log_file
         if daily_stats_log_file:
-            self._daily_stats_log_fh = open(daily_stats_log_file, 'w')
+            self._daily_stats_log_fh = gzip.open(daily_stats_log_file, 'w')
             self._daily_stats_log_writer = csv.writer(self._daily_stats_log_fh)
 
         # Values with which to initialize daily stats:
@@ -168,6 +169,11 @@ class LimitOrderBook(object):
         self._curr_order_interarrival_time = None
 
     def __del__(self):
+
+        # Save daily stats for the current day one final time:
+        # XXX While this works, it might be preferable to finish writing to the
+        # daily stats log in a more obvious way.
+        self.record_daily_stats(self.day)
 
         # Close all file handles before the object instance is cleaned up:
         try:
@@ -217,7 +223,7 @@ class LimitOrderBook(object):
 
                 # Save the daily stats:
                 if self._daily_stats_log_fh and self.day is not None:
-                    self.record_daily_stats(order['trans_date'])
+                    self.record_daily_stats(self.day)
 
                 # Reset the limit order book and trade volume variables when a new
                 # day of orders begins:
@@ -266,10 +272,8 @@ class LimitOrderBook(object):
                     self.modify(order)
             else:
                 raise ValueError('unrecognized activity type %i' % \
-                                 order['activity_type'])
-                
-        # Save current stats when no more orders are available:
-
+                                 order['activity_type'])                
+        
     def create_level(self, indicator, price):
         """
         Create a new empty price level queue.
@@ -1231,45 +1235,3 @@ class LimitOrderBook(object):
         print 'Trade price STD:              ', self._curr_daily_stats['trade_price_std']
         print 'Mean order interarrival time: ', self._curr_daily_stats['mean_order_interarrival_time']
         
-if __name__ == '__main__':
-    start = time.time()
-    
-    format = '%(asctime)s %(name)s %(levelname)s [%(funcName)s] %(message)s'
-    logging.basicConfig(level=logging.WARNING, format=format)
-
-    # Remove root log handlers:
-    for h in logging.root.handlers:
-        logging.root.removeHandler(h)
-     
-    root_dir = '/user/user2/lgivon/india_limit_order_book/'
-    #root_dir = './'
-                        
-    lob = LimitOrderBook(show_output=False, sparse_events=True,
-                         events_log_file=root_dir+'events.log',
-                         stats_log_file=None,
-                         daily_stats_log_file=root_dir+'daily_stats.log')
-    fh = logging.FileHandler(root_dir+'lob.log', 'w')
-    fh.setFormatter(logging.Formatter(format))
-    lob.logger.addHandler(fh)
-
-    file_name = root_dir+'AXISBANK-orders.csv'
-    tp = pandas.read_csv(file_name,
-                         names=col_names,
-                         iterator=True)
-    # for i in xrange(50):
-    #     data = tp.get_chunk(200)
-    #     lob.process(data)
-
-    # Process orders that occurred before a certain cutoff time:
-    while True:
-        try:
-            data = tp.get_chunk(500)
-        except StopIteration:
-            break
-        else:
-            # if data.irow(0)['trans_time'] > '09:20:00.000000':
-            #    break        
-            lob.process(data)
-
-    lob.print_daily_stats()
-    print 'Processing time:              ', (time.time()-start)
