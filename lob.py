@@ -7,6 +7,7 @@ Limit order book simulation for Indian security exchange.
 import _lob
 
 import glob
+import gzip
 import logging
 import pandas
 import time
@@ -35,10 +36,21 @@ if __name__ == '__main__':
     # Process all available files; assumes that the files are named in
     # a way such that their sort order corresponds to the
     # chronological order of their respective contents:    
-    for file_name in sorted(glob.glob(root_dir+'AXISBANK-orders*.csv')):
+    for file_name in sorted(glob.glob(root_dir+'AXISBANK-orders*.csv.gz')):
+
+        # Check whether input file is compressed:
+        with gzip.open(file_name, 'rb') as f:
+            try:
+                f.read(1)
+            except IOError:
+                compression = None
+            else:
+                compression = 'gzip'
+                
         tp = pandas.read_csv(file_name,
                              names=_lob.col_names,
-                             iterator=True)
+                             iterator=True,
+                             compression=compression)
         while True:
             try:
                 data = tp.get_chunk(500)
