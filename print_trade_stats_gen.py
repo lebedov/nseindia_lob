@@ -4,14 +4,15 @@
 Extract and print generated trades data stats.
 """
 
-import csv, datetime, re, sys
+import csv, datetime, gzip, re, sys
 import numpy as np
 
 trade_volume_total = 0
 num_trades = 0
 trade_price_mean = 0.0
 trade_price_std = 0.0
-with open(sys.argv[1], 'r') as f:
+
+with gzip.open(sys.argv[1], 'r') as f:
     for row in csv.reader(f):
         if re.match('.*9/14.*', row[1]) and row[5] == 'trade':
 

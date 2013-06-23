@@ -46,7 +46,7 @@ if __name__ == '__main__':
                 compression = None
             else:
                 compression = 'gzip'
-                
+
         tp = pandas.read_csv(file_name,
                              names=_lob.col_names,
                              iterator=True,
