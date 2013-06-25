@@ -937,12 +937,13 @@ class LimitOrderBook(object):
                     # need to reorder the orders in the identified price level to
                     # list all orders with 0 disclosed volumes before the others:
                     order_number_list = []
-                    for order_number in od.keys():
-                        if od[order_number]['volume_disclosed'] == 0:
-                            order_number_list.append(order_number)
-                    for order_number in od.keys():
-                        if od[order_number]['volume_disclosed'] > 0:
-                            order_number_list.append(order_number)
+                    if od is not None:
+                        for order_number in od.keys():
+                            if od[order_number]['volume_disclosed'] == 0:
+                                order_number_list.append(order_number)
+                        for order_number in od.keys():
+                            if od[order_number]['volume_disclosed'] > 0:
+                                order_number_list.append(order_number)
                     
                     # Move through the limit orders in the price level queue from
                     # oldest to newest:
