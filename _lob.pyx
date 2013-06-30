@@ -12,6 +12,7 @@ import gzip
 import logging
 import numpy as np
 import odict
+import os
 import pandas
 import sys
 import time
@@ -128,19 +129,28 @@ class LimitOrderBook(object):
         # Events are written to this file:
         self._events_log_file = events_log_file
         if events_log_file:
-            self._events_log_fh = gzip.open(events_log_file, 'w')
+            if os.path.splitext(events_log_file)[1] == '.gz':
+                self._events_log_fh = gzip.open(events_log_file, 'w')
+            else:
+                self._events_log_fh = open(events_log_file, 'w')
             self._events_log_writer = csv.writer(self._events_log_fh)
 
         # Stats are written to this file:
         self._stats_log_file = stats_log_file
         if stats_log_file:
-            self._stats_log_fh = gzip.open(stats_log_file, 'w')
+            if os.path.splitext(stats_log_file)[1] == '.gz':
+                self._stats_log_fh = gzip.open(stats_log_file, 'w')                
+            else:
+                self._stats_log_fh = open(stats_log_file, 'w')
             self._stats_log_writer = csv.writer(self._stats_log_fh)
 
         # Daily stats are written to this file:
         self._daily_stats_log_file = daily_stats_log_file
         if daily_stats_log_file:
-            self._daily_stats_log_fh = gzip.open(daily_stats_log_file, 'w')
+            if os.path.splitext(daily_stats_log_file)[1] == '.gz':
+                self._daily_stats_log_fh = gzip.open(daily_stats_log_file, 'w')
+            else:
+                self._daily_stats_log_fh = open(daily_stats_log_file, 'w')
             self._daily_stats_log_writer = csv.writer(self._daily_stats_log_fh)
 
         # Values with which to initialize daily stats:
