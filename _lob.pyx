@@ -62,6 +62,11 @@ class LimitOrderBook(object):
         File in which to log running stats. If set to None, no running stats are logged.
     daily_stats_file : bool
         File in which to log accumulated daily stats. If set to None, no daily stats are logged.
+
+    Notes
+    -----
+    If the file names specified for storing events or stats end with the string '.gz', the log is automatically
+    compressed.
     
     """
     
@@ -226,7 +231,9 @@ class LimitOrderBook(object):
                 
         for row in df.iterrows():
             order = row[1].to_dict()
-            self.logger.info('processing order: %i' % order['order_number'])
+            self.logger.info('processing order: %i (%s, %s)' % (order['order_number'],
+                                                                order['trans_date'],
+                                                                order['trans_time']))
 
             trans_date = datetime.datetime.strptime(order['trans_date'], '%m/%d/%Y')
             if self.day != trans_date.day:
@@ -718,7 +725,8 @@ class LimitOrderBook(object):
                best_bid_volume_original=best_bid_volume_original,
                best_ask_price=best_ask_price,
                best_ask_volume_original=best_ask_volume_original)
-                       
+
+        # Retrieve data regarding the order to be added:
         new_indicator = new_order['buy_sell_indicator']
         volume_original = new_order['volume_original']
         volume_disclosed = new_order['volume_disclosed']
@@ -732,23 +740,27 @@ class LimitOrderBook(object):
         # corresponding limit order in the book at the best ask/bid price:
         if new_order['mkt_flag'] == 'Y':
             while volume_original > 0:
+
+                # Find the queue corresponding to the best bid/ask
+                # price as appropriate; if no such queue exists
+                # (because the buy/sell sections of the book don't
+                # contain at least one buy/sell limit order), then
+                # stop trying to match orders:
                 if new_indicator == BUY:
                     buy_order = new_order
                     best_price = self.best_ask_price()
-
-                    # Sell/buy market orders cannot be processed until there is
-                    # at least one bid/ask limit order in the book:
                     if best_price is None:
-                        self.logger.info('no sell limit orders in book yet')
+                        self.logger.info('no sell limit orders in book yet '
+                                         '- stopping processing of market order')                                         
+                        break
                     od = self.price_level(ASK, best_price) 
                 elif new_indicator == SELL:
                     sell_order = new_order
                     best_price = self.best_bid_price()
-
-                    # Sell/buy market orders cannot be processed until there is
-                    # at least one bid/ask limit order in the book:
                     if best_price is None:
-                        self.logger.info('no buy limit orders in book yet') 
+                        self.logger.info('no buy limit orders in book yet '
+                                         '- stopping processing of market order')                                         
+                        break
                     od = self.price_level(BID, best_price)
                 else:
                     RuntimeError('invalid buy/sell indicator')
@@ -888,12 +900,16 @@ class LimitOrderBook(object):
             # Check whether the limit order is marketable:
             price = new_order['limit_price']
             marketable = True
-            if new_indicator == BUY and self.best_ask_price() is not None and price >= self.best_ask_price():
+            best_ask_price = self.best_ask_price()
+            best_bid_price = self.best_bid_price()
+            if new_indicator == BUY and best_ask_price is not None \
+                   and price >= best_ask_price:
                 self.logger.info('buy order is marketable')
-                best_price = self.best_ask_price();
-            elif new_indicator == SELL and self.best_bid_price() is not None and price <= self.best_bid_price():
+                best_price = best_ask_price;
+            elif new_indicator == SELL and best_bid_price is not None \
+                   and price <= best_bid_price:
                 self.logger.info('sell order is marketable')
-                best_price = self.best_bid_price();
+                best_price = best_bid_price;
             else:
                 marketable = False
 
@@ -911,14 +927,18 @@ class LimitOrderBook(object):
                 # If the requested volume in the order isn't completely
                 # satisfied at the best price, recompute the best price and
                 # try to satisfy the remainder:
-                while volume_original > 0.0:
+                while volume_original > 0.0:                    
                     if new_indicator == BUY:
                         buy_order = new_order                    
                         best_price = self.best_ask_price()
-                        od = self.price_level(ASK, best_price) 
+                        if best_price is None:
+                            self.logger.info('no sell limit orders in book yet')
+                        od = self.price_level(ASK, best_price)
                     elif new_indicator == SELL:
                         sell_order = new_order
-                        best_price = self.best_bid_price()                
+                        best_price = self.best_bid_price()
+                        if best_price is None:
+                            self.logger.info('no buy limit orders in book yet')
                         od = self.price_level(BID, best_price)
                     else:
                         RuntimeError('invalid buy/sell indicator')
