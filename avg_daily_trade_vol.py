@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Compute average daily trade volume of Indian securities.
+Compute average daily trade volume of Indian NSE securities.
 
 Notes
 -----
