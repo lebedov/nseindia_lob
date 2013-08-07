@@ -239,7 +239,7 @@ class LimitOrderBook(object):
             if self.day != trans_date.day:
 
                 # Save the daily stats:
-                if self._daily_stats_log_fh and self.day is not None:
+                if self._daily_stats_log_file and self.day is not None:
                     self.record_daily_stats(self.day)
 
                 # Reset the limit order book and trade volume variables when a new

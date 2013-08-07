@@ -29,7 +29,7 @@ if __name__ == '__main__':
     start = time.time()
 
     # Suppress log generation when not in debug mode:
-    DEBUG = True
+    DEBUG = False
     if DEBUG:
         level = logging.DEBUG
     else:
@@ -43,10 +43,10 @@ if __name__ == '__main__':
 
     # Set up output files:
     events_log_file = os.path.join(output_dir, 'events-' + firm_name + '.log')
-    daily_stats_log_file = os.path.join(output_dir, 'daily_stats-' + firm_name + '.log.gz')
+    daily_stats_log_file = os.path.join(output_dir, 'daily_stats-' + firm_name + '.log')
     
     # Instantiate simulation:
-    lob = _lob.LimitOrderBook(show_output=True, sparse_events=True,
+    lob = _lob.LimitOrderBook(show_output=False, sparse_events=True,
                               events_log_file=events_log_file,
                               stats_log_file=None,
                               daily_stats_log_file=daily_stats_log_file)
