@@ -10,8 +10,9 @@ import glob
 import os
 
 # List of the 50 firms with the highest average daily volume of trade:
-firm_name_list = ['TATAPOWER', 'IFCI']
-firm_name_list_x = ['SUZLON',
+firm_name_list = ['TATAPOWER',
+                  'IFCI',
+                  'SUZLON',
                   'RCOM',
                   'JPASSOCIAT',
                   'UNITECH',
