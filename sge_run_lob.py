@@ -10,9 +10,8 @@ import glob
 import os
 
 # List of the 50 firms with the highest average daily volume of trade:
-firm_name_list = ['TATAPOWER']
-firm_name_list_x = ['IFCI',
-                  'SUZLON',
+firm_name_list = ['TATAPOWER', 'IFCI']
+firm_name_list_x = ['SUZLON',
                   'RCOM',
                   'JPASSOCIAT',
                   'UNITECH',
@@ -64,11 +63,15 @@ firm_name_list_x = ['IFCI',
 
 def main():
 
-    # Directory in which output data should be written:
-    output_dir = '/user/user2/lgivon/india_limit_order_book'
+    # Base directory containing orders_* subdirectories with securities order
+    # data:
+    base_dir = '/user/user2/lgivon/nseindia_lob'
+
+    # Subdirectory in which output data should be written:
+    output_dir = os.path.join(base_dir, 'output')
 
     # Location of LOB implementation:
-    lob_app = os.path.join(output_dir, 'lob.py')
+    lob_app = os.path.join(base_dir, 'lob.py')
 
     s = drmaa.Session()
     s.initialize()
@@ -76,7 +79,7 @@ def main():
     jt.remoteCommand = 'python'
     jt.nativeSpecification = '-q all.q -l virtual_free=2000000000,h_vmem=2000000000,h_stack=67208864 -v PATH=$PATH:/user/user2/lgivon/PYTHON/bin'
     for firm_name in firm_name_list:
-        file_name_list = sorted(glob.glob(os.path.join(output_dir, 'orders_*', '%s-orders.csv.gz' % firm_name)))
+        file_name_list = sorted(glob.glob(os.path.join(base_dir, 'orders_*', '%s-orders.csv.gz' % firm_name)))
         jt.jobName = firm_name
         print 'submitted job: ' + jt.jobName
         jt.args = [lob_app, firm_name, output_dir] + file_name_list
