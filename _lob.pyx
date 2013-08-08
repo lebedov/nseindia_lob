@@ -185,11 +185,6 @@ class LimitOrderBook(object):
 
     def __del__(self):
 
-        # Save daily stats for the current day one final time:
-        # XXX While this works, it might be preferable to finish writing to the
-        # daily stats log in a more obvious way.
-        self.record_daily_stats(self.day)
-
         # Close all file handles before the object instance is cleaned up:
         try:
             self._events_log_fh.close()            
@@ -240,8 +235,8 @@ class LimitOrderBook(object):
 
                 # Save the daily stats:
                 if self._daily_stats_log_file and self.day is not None:
-                    self.record_daily_stats(self.day)
-
+                   self.record_daily_stats(self.day)
+                   
                 # Reset the limit order book and trade volume variables when a new
                 # day of orders begins:
                 self.logger.info('new day - book reset')
@@ -290,7 +285,7 @@ class LimitOrderBook(object):
             else:
                 raise ValueError('unrecognized activity type %i' % \
                                  order['activity_type'])                
-        
+
     def create_level(self, indicator, price):
         """
         Create a new empty price level queue.
@@ -675,7 +670,7 @@ class LimitOrderBook(object):
             Date.
                     
         """
-        
+
         if self._daily_stats_log_file:
             row = [d,
                    self._curr_daily_stats['num_orders'],

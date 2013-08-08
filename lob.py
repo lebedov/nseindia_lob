@@ -87,5 +87,6 @@ if __name__ == '__main__':
                 #    break        
                 lob.process(data)
 
+    lob.record_daily_stats(lob.day)
     lob.print_daily_stats()
     print 'Processing time:              ', (time.time()-start)
