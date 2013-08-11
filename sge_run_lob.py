@@ -8,6 +8,7 @@ managed by Sun Grid Engine using Python bindings for DRMAA.
 import drmaa
 import glob
 import os
+import os.path
 
 # List of the 50 firms with the highest average daily volume of trade:
 firm_name_list = ['TATAPOWER',
@@ -66,7 +67,8 @@ def main():
 
     # Base directory containing orders_* subdirectories with securities order
     # data:
-    base_dir = '/user/user2/lgivon/nseindia_lob'
+    home_dir = os.path.expanduser('~')
+    base_dir = home_dir + '/nseindia_lob'
 
     # Subdirectory in which output data should be written:
     output_dir = os.path.join(base_dir, 'output')
@@ -74,19 +76,18 @@ def main():
     # Location of LOB implementation:
     lob_app = os.path.join(base_dir, 'lob.py')
 
+    # Set the PATH accordingly if using a virtualenv:
     s = drmaa.Session()
     s.initialize()
     jt = s.createJobTemplate()
     jt.remoteCommand = 'python'
-    jt.nativeSpecification = '-q all.q -l virtual_free=2000000000,h_vmem=2000000000,h_stack=67208864 -v PATH=$PATH:/user/user2/lgivon/PYTHON/bin'
+    jt.nativeSpecification = '-q all.q -l virtual_free=2000000000,h_vmem=2000000000,h_stack=67208864 -v PATH=$PATH:%s/PYTHON/bin' % home_dir
     for firm_name in firm_name_list:
         file_name_list = sorted(glob.glob(os.path.join(base_dir, 'orders_*', '%s-orders.csv.gz' % firm_name)))
         jt.jobName = firm_name
         print 'submitted job: ' + jt.jobName
         jt.args = [lob_app, firm_name, output_dir] + file_name_list
         jid = s.runJob(jt)
-    #s.synchronize([s.JOB_IDS_SESSION_ALL], s.TIMEOUT_WAIT_FOREVER, False)
-    #s.deleteJobTemplate(jt)
     s.exit()
 
 if __name__ == '__main__':

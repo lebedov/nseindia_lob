@@ -5,10 +5,8 @@ try:
 except ImportError:
     from distribute_setup import use_setuptools
     use_setuptools()
- 
+
 from setuptools import setup, Extension
-#from distutils.core import setup
-#from distutils.extension import Extension
 from Cython.Distutils import build_ext
 
 NAME =                 'nseindia_lob'

@@ -80,6 +80,11 @@ To run the simulation, invoke the simulation script with a specified firm name,
 output directory, and list of input files. For example: ::
 
      python lob.py INCI ./output INCI-orders-03092013.csv.gz INCI-orders-03102013.csv.gz
+     
+A sample data file (``EXAMPLE-orders.csv``) is included. A script for launching
+the code on a Sun Grid Engine cluster is also included; the script requires the
+`drmaa-python` <http://drmaa-python.github.io/>`_. To use the script, replace
+the listed security names accordingly.
 
 Author
 ------
