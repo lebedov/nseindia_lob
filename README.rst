@@ -1,7 +1,7 @@
 .. -*- rst -*-
 
-Limit Order Book for Indian National Stock Exchange 
-===================================================
+National Stock Exchange of India Limit Order Book Simulation 
+============================================================
 This package implements a limit order book that simulates the 
 processing of limit/market orders on India's National Stock Exchange.
 
