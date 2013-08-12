@@ -23,6 +23,18 @@ Build the extension by running: ::
 
     python setup.py build_ext --inplace
 
+Running the Simulation
+----------------------
+To run the simulation, invoke the simulation script with a specified firm name,
+output directory, and list of input files. For example: ::
+
+     python lob.py INCI ./output INCI-orders-03092013.csv.gz INCI-orders-03102013.csv.gz
+     
+A sample data file (``EXAMPLE-orders.csv``) is included. A script for launching
+the code on a Sun Grid Engine cluster is also included; the script requires the
+`drmaa-python <http://drmaa-python.github.io/>`_ package. To use the script, replace
+the listed security names accordingly.
+
 Input File Format
 -----------------
 The simulation requires input files in CSV format comprising the following
@@ -74,17 +86,26 @@ algo indicator (1)
 client identity flag (1)
   Ignored.
 
-Running the Simulation
-----------------------
-To run the simulation, invoke the simulation script with a specified firm name,
-output directory, and list of input files. For example: ::
+Methodology and Implementation
+------------------------------
+The limit order book is implemented as two red-black trees of queues
+corresponding to different buy and sell price levels. The use of red-black trees
+accelerates determination of the bid and ask prices at any step of the
+simulation. Further acceleration is achieved by compiling the simulation with Cython.
 
-     python lob.py INCI ./output INCI-orders-03092013.csv.gz INCI-orders-03102013.csv.gz
-     
-A sample data file (``EXAMPLE-orders.csv``) is included. A script for launching
-the code on a Sun Grid Engine cluster is also included; the script requires the
-`drmaa-python <http://drmaa-python.github.io/>`_ package. To use the script, replace
-the listed security names accordingly.
+Order processing is restricted to the orders with the first futures expiration date
+observed during processing; all other orders are ignored.
+
+Submitted orders may be add requests, modification requests, or cancellation
+requests. Both market and limit orders are supported; during processing, the
+former are discarded if they fail to match any orders already in the
+book. Residual volume for IOC orders is discarded.  Orders that have explicitly
+disclosed (i.e., non-zero) volumes are assumed to be hidden; if any such orders
+in a price level queue, they are matched against a new incoming order AFTER
+orders with zero disclosed volume.
+
+Daily stats are accumulated during the simulation and are reset when the date
+associated with the processed orders changes. 
 
 Author
 ------
