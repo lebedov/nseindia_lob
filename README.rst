@@ -83,13 +83,13 @@ output directory, and list of input files. For example: ::
      
 A sample data file (``EXAMPLE-orders.csv``) is included. A script for launching
 the code on a Sun Grid Engine cluster is also included; the script requires the
-`drmaa-python <http://drmaa-python.github.io/>`_. To use the script, replace
+`drmaa-python <http://drmaa-python.github.io/>`_ package. To use the script, replace
 the listed security names accordingly.
 
 Author
 ------
-The code was written by `Lev Givon <lev@columbia.edu>`_ in 2012-2013 for Prof.
-`Costis Maglaras <cm479@columbia.edu>`_ at Columbia Unversity's Business School.
+The code was written by Lev Givon in 2012-2013 for Prof.
+Costis Maglaras at Columbia Unversity's Business School.
 
 License
 -------
