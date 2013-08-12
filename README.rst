@@ -83,7 +83,7 @@ output directory, and list of input files. For example: ::
      
 A sample data file (``EXAMPLE-orders.csv``) is included. A script for launching
 the code on a Sun Grid Engine cluster is also included; the script requires the
-`drmaa-python` <http://drmaa-python.github.io/>`_. To use the script, replace
+`drmaa-python <http://drmaa-python.github.io/>`_. To use the script, replace
 the listed security names accordingly.
 
 Author
