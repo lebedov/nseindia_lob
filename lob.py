@@ -4,6 +4,11 @@
 Limit order book simulation for Indian security exchange.
 """
 
+# Copyright (c) 2012-2014, Lev Givon
+# All rights reserved.
+# Distributed under the terms of the BSD license:
+# http://www.opensource.org/licenses/bsd-license
+
 import _lob
 
 import gzip
