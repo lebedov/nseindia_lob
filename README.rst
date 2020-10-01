@@ -3,7 +3,7 @@
 National Stock Exchange of India Limit Order Book Simulation 
 ============================================================
 This package implements a limit order book that simulates the 
-processing of limit/market orders on India's National Stock Exchange(NSE).
+processing of limit/market orders on India's National Stock Exchange (NSE).
 
 Requirements
 ------------
